@@ -1,17 +1,60 @@
-pragma solidity ^0.6.12;
+pragma solidity ^0.8.13;
 /*
  * SPDX-License-Identifier: MIT
  */
 pragma experimental ABIEncoderV2;
 
-
+// Erläutrerung: https://gist.github.com/BjornvdLaan/e41d292339bbdebb831d0b976e1804e8
 contract Verify {
+    // //-
+    // function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
+    //     if (_i == 0) {
+    //         return "0";
+    //     }
+    //     uint j = _i;
+    //     uint len;
+    //     while (j != 0) {
+    //         len++;
+    //         j /= 10;
+    //     }
+    //     bytes memory bstr = new bytes(len);
+    //     uint k = len;
+    //     while (_i != 0) {
+    //         k = k-1;
+    //         uint8 temp = (48 + uint8(_i - _i / 10 * 10));
+    //         bytes1 b1 = bytes1(temp);
+    //         bstr[k] = b1;
+    //         _i /= 10;
+    //     }
+    //     return string(bstr);
+    // }
+    // //-
+    // function toString(address account) public pure returns(string memory) {
+    //     return toString(abi.encodePacked(account));
+    // }
+    // //-
+    // function toString(uint256 value) public pure returns(string memory) {
+    //     return toString(abi.encodePacked(value));
+    // }
+    // //-
+    // function toString(bytes32 value) public pure returns(string memory) {
+    //     return toString(abi.encodePacked(value));
+    // }
+    // //-
+    // function toString(bytes memory data) public pure returns(string memory) {
+    //     bytes memory alphabet = "0123456789abcdef";
 
-  function recoverSigner(bytes32 message, bytes memory sig)
-       public
-       pure
-       returns (address)
-    {
+    //     bytes memory str = new bytes(2 + data.length * 2);
+    //     str[0] = "0";
+    //     str[1] = "x";
+    //     for (uint i = 0; i < data.length; i++) {
+    //         str[2+i*2] = alphabet[uint(uint8(data[i] >> 4))];
+    //         str[3+i*2] = alphabet[uint(uint8(data[i] & 0x0f))];
+    //     }
+    //     return string(str);
+    // }
+
+  function recoverSigner(bytes32 message, bytes memory sig) public pure returns (address) {
        uint8 v;
        bytes32 r;
        bytes32 s;
@@ -26,11 +69,7 @@ contract Verify {
        }
   }
 
-  function splitSignature(bytes memory sig)
-       public
-       pure
-       returns (uint8, bytes32, bytes32)
-   {
+  function splitSignature(bytes memory sig) public pure returns (uint8, bytes32, bytes32) {
        require(sig.length == 65);
 
        bytes32 r;
@@ -89,29 +128,6 @@ library Endian {
 }
 
 // ----------------------------------------------------------------------------
-// Safe maths
-// ----------------------------------------------------------------------------
-library SafeMath {
-    function add(uint a, uint b) internal pure returns (uint c) {
-        c = a + b;
-        require(c >= a);
-    }
-    function sub(uint a, uint b) internal pure returns (uint c) {
-        require(b <= a);
-        c = a - b;
-    }
-    function mul(uint a, uint b) internal pure returns (uint c) {
-        c = a * b;
-        require(a == 0 || c / a == b);
-    }
-    function div(uint a, uint b) internal pure returns (uint c) {
-        require(b > 0);
-        c = a / b;
-    }
-}
-
-
-// ----------------------------------------------------------------------------
 // ERC Token Standard #20 Interface
 // https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20-token-standard.md
 // ----------------------------------------------------------------------------
@@ -147,7 +163,7 @@ contract Owned {
 
     event OwnershipTransferred(address indexed _from, address indexed _to);
 
-    constructor() public {
+    constructor() {
         owner = msg.sender;
     }
 
@@ -196,14 +212,17 @@ contract Oracled is Owned {
 // initial fixed supply, added teleport method
 // ----------------------------------------------------------------------------
 contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
-    using SafeMath for uint;
 
     string public symbol;
     string public  name;
     uint8 public decimals;
-    uint public _totalSupply;
     uint8 public threshold;
     uint8 public thisChainId;
+    uint public _totalSupply;
+    //- add code
+    address public swapTokenAddress;
+    mapping(uint8 => uint64) public indexes;
+    //- end add
 
     mapping(address => uint) balances;
     mapping(address => mapping(address => uint)) allowed;
@@ -211,7 +230,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     mapping(uint64 => mapping(address => bool)) signed;
     mapping(uint64 => bool) public claimed;
 
-    event Teleport(address indexed from, string to, uint tokens, uint chainId);
+    event Teleport(address indexed from, string to, uint tokens, uint8 chainId, uint64 index);
     event Claimed(uint64 id, address to, uint tokens);
 
     struct TeleportData {
@@ -227,7 +246,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // ------------------------------------------------------------------------
     // Constructor
     // ------------------------------------------------------------------------
-    constructor() public {
+    constructor() {
         symbol = "TLM";
         name = "Alien Worlds Trilium";
         decimals = 4;
@@ -235,6 +254,10 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         balances[address(0)] = _totalSupply;
         threshold = 3;
         thisChainId = 2;
+
+        //- add code
+        swapTokenAddress = 0xB84cBbF09b3Ed388a45cD875ebba41a20365e6e7; //- test
+        //- end add
     }
 
 
@@ -260,8 +283,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // - 0 value transfers are allowed
     // ------------------------------------------------------------------------
     function transfer(address to, uint tokens) override public returns (bool success) {
-        balances[msg.sender] = balances[msg.sender].sub(tokens);
-        balances[to] = balances[to].add(tokens);
+        balances[msg.sender] = balances[msg.sender] - tokens;
+        balances[to] = balances[to] + tokens;
         emit Transfer(msg.sender, to, tokens);
         return true;
     }
@@ -281,7 +304,6 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         return true;
     }
 
-
     // ------------------------------------------------------------------------
     // Transfer `tokens` from the `from` account to the `to` account
     //
@@ -292,9 +314,9 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // - 0 value transfers are allowed
     // ------------------------------------------------------------------------
     function transferFrom(address from, address to, uint tokens) override public returns (bool success) {
-        balances[from] = balances[from].sub(tokens);
-        allowed[from][msg.sender] = allowed[from][msg.sender].sub(tokens);
-        balances[to] = balances[to].add(tokens);
+        balances[from] = balances[from] - tokens;
+        allowed[from][msg.sender] = allowed[from][msg.sender] - tokens;
+        balances[to] = balances[to] + tokens;
         emit Transfer(from, to, tokens);
         return true;
     }
@@ -330,12 +352,18 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // chainId : The chain id that they will be sent to
     // ------------------------------------------------------------------------
 
-    function teleport(string memory to, uint tokens, uint chainid) public returns (bool success) {
-        balances[msg.sender] = balances[msg.sender].sub(tokens);
-        balances[address(0)] = balances[address(0)].add(tokens);
-
+    function teleport(string memory to, uint tokens, uint8 chainid) public returns (bool success) {
+        //- replace
+        balances[msg.sender] = balances[msg.sender] - tokens;
+        balances[address(0)] = balances[address(0)] + tokens;
         emit Transfer(msg.sender, address(0), tokens);
-        emit Teleport(msg.sender, to, tokens, chainid);
+        emit Teleport(msg.sender, to, tokens, chainid, indexes[chainid]);
+        indexes[chainid] = indexes[chainid] + 1;
+        //- with
+        // ERC20Interface(swapTokenAddress).transferFrom(msg.sender, address(this), tokens);
+        // balances[msg.sender] = balances[msg.sender].add(tokens);
+        // emit Teleport(msg.sender, to, tokens, chainid, teleportId++); 
+        //- end replace
 
         return true;
     }
@@ -365,6 +393,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
             symbolRaw := mload(add(add(sigData, 0x8), 28))
             chainId := mload(add(add(sigData, 0x1), 36))
             toAddress := mload(add(add(sigData, 0x14), 37))
+            //- Never use an oracle account for two contracts the contract name should be signed, too.
         }
 
         td.id = Endian.reverse64(id);
@@ -376,7 +405,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         td.toAddress = toAddress;
 
         require(thisChainId == td.chainId, "Invalid Chain ID");
-        require(block.timestamp < SafeMath.add(td.ts, (60 * 60 * 24 * 30)), "Teleport has expired");
+        require(block.timestamp < td.ts + (60 * 60 * 24 * 30), "Teleport has expired");
 
         require(!claimed[td.id], "Already Claimed");
 
@@ -400,11 +429,11 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
             address potential = Verify.recoverSigner(message, signatures[i]);
 
             // Check that they are an oracle and they haven't signed twice
-            if (oracles[potential] && !signed[td.id][potential]){
+            if (oracles[potential] && !signed[td.id][potential]){       //- This !signed[td.id][potential] should be within this condition, otherwise numberSigs will never be reached if one oragle changed before other has signed
                 signed[td.id][potential] = true;
                 numberSigs++;
 
-                if (numberSigs >= 10){
+                if (numberSigs >= 10){  //- Never happens, because i < signatures.length <= 10
                     break;
                 }
             }
@@ -412,11 +441,17 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
 
         require(numberSigs >= threshold, "Not enough valid signatures provided");
 
-        balances[address(0)] = balances[address(0)].sub(td.quantity);
-        balances[td.toAddress] = balances[td.toAddress].add(td.quantity);
+        //- replace
+        balances[address(0)] = balances[address(0)] - td.quantity;
+        balances[td.toAddress] = balances[td.toAddress] + td.quantity;
+        emit Transfer(address(0), td.toAddress, td.quantity);
+        
+        //- with
+        // balances[msg.sender] = balances[msg.sender].sub(td.quantity);
+        // ERC20Interface(swapTokenAddress).transfer(msg.sender, td.quantity);
+        //- end replace
 
         emit Claimed(td.id, td.toAddress, td.quantity);
-        emit Transfer(address(0), td.toAddress, td.quantity);
 
         return td.toAddress;
     }
@@ -456,6 +491,6 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // Owner can transfer out any accidentally sent ERC20 tokens
     // ------------------------------------------------------------------------
     function transferAnyERC20Token(address tokenAddress, uint tokens) public onlyOwner returns (bool success) {
-        return ERC20Interface(tokenAddress).transfer(owner, tokens);
+        return ERC20Interface(tokenAddress).transfer(owner, tokens); //- owner should be replaced by a recipient which whould be one of the parameters, or not?
     }
 }

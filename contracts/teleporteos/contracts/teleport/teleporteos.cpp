@@ -1,6 +1,6 @@
 #include "teleporteos.hpp"
 
-using namespace alienworlds;
+using namespace savactsteleport;
 
 teleporteos::teleporteos(name s, name code, datastream<const char *> ds)
   : contract(s, code, ds),
@@ -36,7 +36,7 @@ ACTION teleporteos::ini(const asset min, const asset fixfee, const double varfee
     s.fcancel = freeze;
     s.oracles = oracleCount;
     s.threshold = threshold;
-    s.version = 1;
+    s.version = 2;
     s.id = chain_id;
   });
 
@@ -133,12 +133,18 @@ inline bool teleporteos::hasId(uint8_t chain_id, stats_table::const_iterator sta
   return itr != stat->chains.end();
 }
 
+inline void teleporteos::checkChain(uint8_t chain_id, stats_table::const_iterator stat, uint64_t index){
+  auto chain = stat->chains.find(chain_id);
+  check(chain != stat->chains.end(), "This chain id is not available");
+  check(chain->second.top <= index, "This teleport is already completed");
+}
+
 ACTION teleporteos::addchain(string name, string abbreviation, uint8_t chain_id, string net_id, string teleaddr, string tokenaddr){
   require_auth(get_self());
   auto stat = _stats.find(TOKEN_SYMBOL.raw());
-  check(!hasId(chain_id, stat), "This chain is already listed");
 
   chainData chain;
+  chain.top = 0;
   chain.name = name;
   chain.abbreviation = abbreviation;
   chain.net_id = net_id;
@@ -221,25 +227,31 @@ ACTION teleporteos::sign(name oracle_name, uint64_t id, string signature) {
 }
 
 // Receiving token from BSC/ETH
-ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset quantity, uint8_t chain_id, bool confirmed) {
+ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset quantity, uint8_t chain_id, uint64_t index, bool confirmed) {
   require_oracle(oracle_name);
   auto stat = _stats.find(TOKEN_SYMBOL.raw());
   check(!stat->foracles, "Oracle actions are freezed");
+
+  check(quantity.amount > 0, "Quantity cannot be negative");
+  check(quantity.is_valid(), "Asset not valid");
 
   receipts_table _receipts(get_self(), get_self().value);
   auto ref_ind = _receipts.get_index<"byref"_n>();
   auto receipt = ref_ind.find(ref);
 
-  check(quantity.amount > 0, "Quantity cannot be negative");
-  check(quantity.is_valid(), "Asset not valid");
-
-  check(hasId(chain_id, stat), "This chain id is not available");
+  // Find the exact same entry because otherwise an oracle could enter a wrong teleport and block the whole bridge
+  while (receipt != ref_ind.end() && (receipt->index != index || receipt->chain_id != chain_id || receipt->quantity != quantity || receipt->to != to)) {
+    receipt++;
+  }
 
   if (receipt == ref_ind.end()) {
+    checkChain(chain_id, stat, index);
+
     _receipts.emplace(get_self(), [&](auto &r) {
       r.id = _receipts.available_primary_key();
       r.date = current_time_point();
       r.ref = ref;
+      r.index = index;
       r.chain_id = chain_id;
       r.to = to;
       r.quantity = quantity;
@@ -253,7 +265,7 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
     });
   } else {
     if (confirmed) {
-      check(!receipt->completed, "This teleport is already completed");
+      check(!receipt->completed, "This teleport is already completed"); // TODO: No use of this entry, because completed received teleports are count up 
 
       check(receipt->quantity == quantity, "Quantity mismatch");
       check(receipt->to == to, "Account mismatch");
@@ -261,22 +273,29 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
       check(existing == receipt->approvers.end(), "Oracle has already approved");
       bool completed = false;
 
-
-      if (receipt->confirmations >= stat->threshold - 1) { // check for one less because of this confirmation
-        // Pay fee
+      if (receipt->confirmations >= stat->threshold - 1) { // Check for one less because of this confirmation
+        // Calculate fee
         uint64_t fee = calc_fee(stat, quantity.amount);
         _stats.modify(*stat, get_self(), [&](auto &s) {
+          // Check chain and increase top completed index in one stroke 
+          auto chain = s.chains.find(chain_id);
+          check(chain != s.chains.end(), "This chain id is not available");
+          check(chain->second.top <= index, "This teleport is already completed");
+          check(chain->second.top == index, "Has to confirm previous teleports first.");
+          chain->second.top++;
+
+          // Pay fee
           s.collected += fee;
         });
         quantity.amount -= fee;
         
         // Pay out recipient
         string memo = "Teleport";
-        action(permission_level{get_self(), "active"_n}, TOKEN_CONTRACT,
-               "transfer"_n, make_tuple(get_self(), to, quantity, memo))
-            .send();
+        action(permission_level{get_self(), "active"_n}, TOKEN_CONTRACT, "transfer"_n, make_tuple(get_self(), to, quantity, memo)).send();
 
         completed = true;
+      } else {
+        checkChain(chain_id, stat, index);
       }
 
       _receipts.modify(*receipt, get_self(), [&](auto &r) {
@@ -284,27 +303,12 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
         r.approvers.push_back(oracle_name);
         r.completed = completed;
       });
+
+      // TODO: Delete all other receiving teleports with the same index
     } else {
       check(false, "Another oracle has already registered teleport");
     }
   }
-}
-
-ACTION teleporteos::repairrec(uint64_t id, asset quantity, vector<name> approvers, bool completed) {
-  require_auth(get_self());
-
-  receipts_table _receipts(get_self(), get_self().value);
-  auto receipt = _receipts.require_find(id, "Receipt does not exist.");
-
-  check(quantity.amount > 0, "Quantity cannot be negative");
-  check(quantity.is_valid(), "Asset not valid");
-
-  _receipts.modify(*receipt, get_self(), [&](receipt_item &r) {
-    r.confirmations = approvers.size();
-    r.approvers = approvers;
-    r.quantity = quantity;
-    r.completed = completed;
-  });
 }
 
 /*
@@ -354,13 +358,24 @@ ACTION teleporteos::unregoracle(name oracle_name) {
   });
 }
 
-ACTION teleporteos::delreceipts(time_point_sec to_date) {
+ACTION teleporteos::delreceipts(uint64_t to_id) {
   require_auth(get_self());
-
+  auto stat = _stats.find(TOKEN_SYMBOL.raw());
   receipts_table _receipts(get_self(), get_self().value);
+  
+  check(_receipts.begin() != _receipts.end(), "No entries");
+  check(to_id <= _receipts.rbegin()->id, "Id dos not exists");
+
   auto receipt = _receipts.begin();
-  while (receipt != _receipts.end()) {
-    if(receipt->date < to_date){
+  while (receipt->id < to_id) {
+    auto chain = stat->chains.find(receipt->chain_id);
+    // Continue if this chain is no longer in the stats chain list
+    if(chain == stat->chains.end()){
+      receipt++;
+      continue;
+    }
+    // Erase the receipt item if it is lower than top confirmed of this chain
+    if(receipt->index < chain->second.top){
       receipt = _receipts.erase(receipt);
     } else {
       receipt++;

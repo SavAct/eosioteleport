@@ -1,3 +1,5 @@
+.vs
+.vscode
 config.js
 teleporteos.ts
 eosio.token.ts

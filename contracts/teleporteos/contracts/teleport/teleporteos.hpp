@@ -7,11 +7,11 @@
 using namespace eosio;
 using namespace std;
 
-#define TOKEN_CONTRACT_STR "alien.worlds"
+#define TOKEN_CONTRACT_STR "token.savact"
 #define TOKEN_CONTRACT name(TOKEN_CONTRACT_STR)
-#define TOKEN_SYMBOL symbol("TLM", 4)
+#define TOKEN_SYMBOL symbol("SAVACT", 4)
 
-namespace alienworlds {
+namespace savactsteleport {
 class [[eosio::contract("teleporteos")]] teleporteos : public contract {
 private:
 
@@ -21,6 +21,7 @@ private:
     string net_id;          // Id used in metamask
     string teleaddr;        // Teleport contract address
     string tokenaddr;       // Token contract address
+    uint64_t top;           // Last confirmed received teleport index
   };
 
   struct [[eosio::table("stats")]] stats_item {
@@ -96,6 +97,7 @@ private:
     checksum256 ref;
     name to;
     uint8_t chain_id;
+    uint64_t index;
     uint8_t confirmations;
     asset quantity;
     vector<name> approvers;
@@ -148,6 +150,15 @@ private:
    * @return true if it exists otherwise false
    */
   inline static bool hasId(uint8_t chain_id, stats_table::const_iterator stat);
+
+  /**
+   * @brief Check the chain_id is available and the index not completed yet
+   * 
+   * @param chain_id Identification number for the chain
+   * @param stat Iterator to the stats table entry
+   * @param index Index of the receiving teleport of the chain
+   */
+  inline void checkChain(uint8_t chain_id, stats_table::const_iterator stat, uint64_t index);
 public:
   using contract::contract;
 
@@ -190,7 +201,6 @@ public:
   ACTION teleport(name from, asset quantity, uint8_t chain_id, checksum256 eth_address);
   ACTION logteleport(uint64_t id, uint32_t timestamp, name from, asset quantity, uint8_t chain_id, checksum256 eth_address);
   ACTION sign(name oracle_name, uint64_t id, string signature);
-  ACTION repairrec(uint64_t id, asset quantity, vector<name> approvers, bool completed);
   ACTION withdraw(name from, asset quantity);
   /**
    * @brief Cancel a teleport which is not claimed yet and 32 days old. Consider, you will not get back payed fees 
@@ -198,19 +208,18 @@ public:
    * @param id Teleport id
    */
   ACTION cancel(uint64_t id);
-  ACTION received(name oracle_name, name to, checksum256 ref, asset quantity, uint8_t chain_id, bool confirmed);
+  ACTION received(name oracle_name, name to, checksum256 ref, asset quantity, uint8_t chain_id, uint64_t index, bool confirmed);
   ACTION claimed(name oracle_name, uint64_t id, checksum256 to_eth, asset quantity);
   ACTION regoracle(name oracle_name);
   ACTION unregoracle(name oracle_name);
   ACTION sign(string signature);
 
   /**
-   * @brief Delete all receipt entries until a specific date
-   * Note: Oracles have to ignore old receipts to avoid double spending
+   * @brief Delete all receipt entries until a receipt id
    * 
-   * @param to_date 
+   * @param to_id Delete all entries until this id.
    */
-  ACTION delreceipts(time_point_sec to_date);
+  ACTION delreceipts(uint64_t to_id);
 
   /**
    * @brief Delete claimed and canceled teleports in teleport and cancel table
@@ -257,13 +266,13 @@ public:
    */
   ACTION payoracles();
 
-  // // Should never execute
-  // ACTION delstats(){
-  //   require_auth(get_self());
-  //   auto stat = _stats.begin();
-  //   while (stat != _stats.end()) {
-  //     stat = _stats.erase(stat);
-  //   }
-  // }
+  // Should never execute
+  ACTION delstats(){
+    require_auth(get_self());
+    auto stat = _stats.begin();
+    while (stat != _stats.end()) {
+      stat = _stats.erase(stat);
+    }
+  }
 };
-} // namespace alienworlds
+} // namespace savactsteleport

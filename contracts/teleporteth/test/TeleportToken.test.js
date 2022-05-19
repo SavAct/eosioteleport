@@ -34,6 +34,7 @@ function eosioGetContractByAbi(abi) {
   return { types, actions };
 }
 
+// Note: The following keys are public. Use them only for testings!
 const TestSettings = {
   Token: {
     symbol: "TLM",
@@ -238,8 +239,19 @@ contract('TeleportToken', (accounts) => {
     const receiveChainId = TestSettings.chainId + 1
     await instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[1]});
     assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Balance of account got not reduced')
+    assert.equal(await instance.indexes(receiveChainId), 1, `Wrong index fort teleports to chain ${receiveChainId}`);
 
     await catchRevert(instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[6]}), 'Can teleport without any balance')
+
+    // Teleports to check indexes 
+    const tokenAmount2 = tokenAmount1 - sendAmount;
+    const sendAmount2 = tokenAmount2 / 10;
+    const secondReceiveChainId = TestSettings.chainId + 2
+    await instance.teleport('frauerdbeere', sendAmount2, secondReceiveChainId, {from: accounts[1]});
+    await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
+    await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
+    assert.equal(await instance.indexes(secondReceiveChainId), 1, `Wrong index fort teleports to chain ${secondReceiveChainId }`);
+    assert.equal(await instance.indexes(receiveChainId), 3, `Wrong index fort teleports to chain ${receiveChainId }`);
   })
 
   it('Transfer ownership', async () => {
