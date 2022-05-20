@@ -1,13 +1,13 @@
 // Note: There is no sufficient typescript support for truffle tests now
 
-const TeleportToken = artifacts.require("TeleportToken");
-const ethUtil = require('ethereumjs-util');
-const eosjs = require('eosjs');
-const ecc = require('eosjs-ecc');
-const { TextDecoder, TextEncoder } = require('text-encoding');
-const fs = require('fs');
+const TeleportToken = artifacts.require("TeleportToken")
+const ethUtil = require('ethereumjs-util')
+const eosjs = require('eosjs')
+const ecc = require('eosjs-ecc')
+const { TextDecoder, TextEncoder } = require('text-encoding')
+const fs = require('fs')
 
-const catchRevert = require("./exceptions.js").catchRevert;
+const catchRevert = require("./exceptions.js").catchRevert
 
 function generateAllKeys(ethPrivateKey){
   let ethPrivate = Buffer.from(ethPrivateKey, 'hex')
@@ -26,10 +26,10 @@ function generateAllKeys(ethPrivateKey){
 }
 
 function eosioGetContractByAbi(abi) {
-  const types = eosjs.Serialize.getTypesFromAbi(eosjs.Serialize.createInitialTypes(), abi);
+  const types = eosjs.Serialize.getTypesFromAbi(eosjs.Serialize.createInitialTypes(), abi)
   const actions = new Map();
   for (const { name, type } of abi.actions) {
-      actions.set(name, eosjs.Serialize.getType(types, type));
+      actions.set(name, eosjs.Serialize.getType(types, type))
   }
   return { types, actions };
 }
@@ -76,22 +76,33 @@ function fromHexString(hexString){
   return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
 }
 
+function signWithTesSettings(logDataHex){
+  const logDataBuffer = Buffer.from(logDataHex.substring(2), 'hex')
+  const logDataKeccak = ethUtil.keccak(logDataBuffer)
+  let signatures = []
+  for(let i = 0; i < TestSettings.threshold; i++) {
+    const sig = signWithKey(TestSettings.oracles[i].keys.ethPrivate, logDataKeccak)
+    signatures.push(sig)
+  }
+  return signatures
+}
+
 contract('TeleportToken', (accounts) => {
 
   // List all oracles in console log
   for (let i = 0; i < TestSettings.oracles.length; i++) {
-    const element = TestSettings.oracles[i];
-    console.log(element.eosio_name, `${element.keys.ethAddress} ${element.keys.eosioPrivate}`);
+    const element = TestSettings.oracles[i]
+    console.log(element.eosio_name, `${element.keys.ethAddress} ${element.keys.eosioPrivate}`)
   }
 
   it('Total supply', async () => {
-    const instance = await TeleportToken.deployed();
-    const balance = await instance._totalSupply.call();
-    assert.equal(balance.valueOf(), TestSettings.Token.totalSupply, `Total supply is not ${TestSettings.Token.totalSupply}`);
+    const instance = await TeleportToken.deployed()
+    const balance = await instance._totalSupply.call()
+    assert.equal(balance.valueOf(), TestSettings.Token.totalSupply, `Total supply is not ${TestSettings.Token.totalSupply}`)
   })
 
   it('Register oracles', async () => {
-    const instance = await TeleportToken.deployed();
+    const instance = await TeleportToken.deployed()
     
     // Check test settings
     assert.equal(TestSettings.oracles.length > 0, true, 'No oracles defined')
@@ -119,22 +130,22 @@ contract('TeleportToken', (accounts) => {
   let tokenAmount1 = 500000;
   const fullToken1 = Math.round(tokenAmount1/(10**TestSettings.Token.decimals))
   it('Receive token from eosio chain', async () => {
-    const instance = await TeleportToken.deployed();
+    const instance = await TeleportToken.deployed()
 
     // Check initial state of token amounts
-    assert.equal(await instance.balanceOf.call(accounts[0]).valueOf(), 0, 'Balance of account 0 is not 0');
-    assert.equal(await instance.balanceOf.call(accounts[1]).valueOf(), 0, 'Balance of account 1 is not 0');
+    assert.equal(await instance.balanceOf.call(accounts[0]).valueOf(), 0, 'Balance of account 0 is not 0')
+    assert.equal(await instance.balanceOf.call(accounts[1]).valueOf(), 0, 'Balance of account 1 is not 0')
     
     // Check abi file
     assert.equal(TestSettings.eosioAbi.actions.length > 0, true, "No actions in abi file")
     
     // Create example log data by abi definition
-    const eosioFromAcc = "wololo"
-    const logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`;
+    const eosioFromAcc = 'wololo'
+    const logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`
     const logData = {
       id: 0,                                                              // uint64
       timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
-      from: eosioFromAcc,                                                 // uint64
+      from: eosioFromAcc,                                                 // string account name
       quantity: logAsset,                                                 // uint64
       chain_id: TestSettings.chainId,                                     // uint8
       eth_address: accounts[1].substring(2) + '000000000000000000000000'  // address
@@ -166,19 +177,41 @@ contract('TeleportToken', (accounts) => {
     await catchRevert(instance.claim.call(logDataHex, falseSignatures, {from: accounts[1]}), 'Claim with false signatures')
     
     // Sign the example log data
-    const logDataBuffer = Buffer.from(logDataHex.substring(2), 'hex')
-    const logDataKeccak = ethUtil.keccak(logDataBuffer)
-    let signatures = [];
-    for(let i = 0; i < TestSettings.threshold; i++) {
-      const sig = signWithKey(TestSettings.oracles[i].keys.ethPrivate, logDataKeccak)
-      signatures.push(sig);
-    }
+    let signatures = signWithTesSettings(logDataHex)
 
     // Pay out the teleported tokens
     await instance.claim(logDataHex, signatures, {from: accounts[2]});  // Claim by a different account is allowed
     assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), 0, 'Wrong account got funds')
-    const receiveBalance = await instance.balanceOf.call(accounts[1]) 
     assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), fullToken1 * (10 ** TestSettings.Token.decimals), 'Account 1 does not got the right amount of funds')
+
+    // Try to claim the same teleport again
+    await catchRevert(instance.claim(logDataHex, signatures, {from: accounts[2]}), 'It is possible claim the same teleport twice')
+
+    // Try to claim the same id
+    let logDataTry = {
+      id: 0,                                                              // uint64
+      timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
+      from: eosioFromAcc,                                                 // string account name
+      quantity: logAsset,                                                 // uint64
+      chain_id: TestSettings.chainId,                                     // uint8
+      eth_address: accounts[7].substring(2) + '000000000000000000000000'  // address
+    }
+    let logDataHexTry = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logDataTry, new TextEncoder(), new TextDecoder());
+    let signaturesTry = signWithTesSettings(logDataHexTry)
+    await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an already used id')
+
+    // Try to claim a unkown chain
+    logDataTry.id = 1
+    logDataTry.chain_id = TestSettings.chainId + 1
+    logDataHexTry = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logDataTry, new TextEncoder(), new TextDecoder());
+    signaturesTry = signWithTesSettings(logDataHexTry)
+    await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an unknown chain id')
+
+    // Should succeed a second received teleport 
+    logDataTry.chain_id = TestSettings.chainId
+    logDataHexTry = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logDataTry, new TextEncoder(), new TextDecoder());
+    signaturesTry = signWithTesSettings(logDataHexTry)
+    instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]})
   });
 
   it('Send token within the chain', async () => {
@@ -244,14 +277,59 @@ contract('TeleportToken', (accounts) => {
     await catchRevert(instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[6]}), 'Can teleport without any balance')
 
     // Teleports to check indexes 
-    const tokenAmount2 = tokenAmount1 - sendAmount;
-    const sendAmount2 = tokenAmount2 / 10;
+    const sendAmount2 = tokenAmount1 / 10;
+    tokenAmount1 -= 3 * sendAmount2; 
     const secondReceiveChainId = TestSettings.chainId + 2
     await instance.teleport('frauerdbeere', sendAmount2, secondReceiveChainId, {from: accounts[1]});
     await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
     await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
     assert.equal(await instance.indexes(secondReceiveChainId), 1, `Wrong index fort teleports to chain ${secondReceiveChainId }`);
     assert.equal(await instance.indexes(receiveChainId), 3, `Wrong index fort teleports to chain ${receiveChainId }`);
+  })
+  
+  it('Check freeze', async () => {
+    const instance = await TeleportToken.deployed()
+    const sendAmount = tokenAmount1 / 10
+      
+    // Unauthorized call of freez function
+    await catchRevert(instance.freeze(true, false, false, {from: accounts[3]}), "Unauthorized execution of freeze function");
+    
+    // Create new claim with signatures
+    const logData = {
+      id: 1,
+      timestamp: Math.round(new Date().getTime() / 1000),
+      from: 'wololo',               
+      quantity: `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`,
+      chain_id: TestSettings.chainId,
+      eth_address: accounts[1].substring(2) + '000000000000000000000000'
+    }
+    const logDataHexByAbi = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logData, new TextEncoder(), new TextDecoder());
+    let signatures = signWithTesSettings(logDataHexByAbi)
+
+    // Freeze only claim
+    await instance.freeze(true, false, false, {from: accounts[0]});
+    assert.equal(await instance.freezedClaim.call(), true, 'Claim is not freezed')
+    assert.equal(await instance.freezedTeleport.call(), false, 'Teleport is freezed')
+    assert.equal(await instance.freezedTransfer.call(), false, 'Transfer is freezed')
+    await catchRevert(instance.claim(logDataHexByAbi, signatures, {from: accounts[2]}), 'Can claim even it is freezed')
+    
+    // Freeze only teleport
+    await instance.freeze(false, true, false, {from: accounts[0]});
+    assert.equal(await instance.freezedClaim.call(), false, 'Claim is freezed')
+    assert.equal(await instance.freezedTeleport.call(), true, 'Teleport is not freezed')
+    assert.equal(await instance.freezedTransfer.call(), false, 'Transfer is freezed')
+    await catchRevert(instance.teleport('frauerdbeere', sendAmount, TestSettings.chainId + 2, {from: accounts[1]}), 'Can teleport even it is freezed')
+    
+    // Freeze only transfer
+    await instance.freeze(false, false, true, {from: accounts[0]});
+    assert.equal(await instance.freezedClaim.call(), false, 'Claim is freezed')
+    assert.equal(await instance.freezedTeleport.call(), false, 'Teleport is freezed')
+    assert.equal(await instance.freezedTransfer.call(), true, 'Transfer not freezed')
+    await catchRevert(instance.transfer(accounts[1], sendAmount, {from: accounts[1]}), 'Can tranfer even it is freezed')
+
+    // Unfreeze transfer
+    await instance.freeze(false, false, false, {from: accounts[0]});
+
   })
 
   it('Transfer ownership', async () => {
