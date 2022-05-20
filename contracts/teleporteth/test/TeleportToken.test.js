@@ -5,7 +5,6 @@ const ethUtil = require('ethereumjs-util')
 const eosjs = require('eosjs')
 const ecc = require('eosjs-ecc')
 const { TextDecoder, TextEncoder } = require('text-encoding')
-const fs = require('fs')
 
 const catchRevert = require("./exceptions.js").catchRevert
 
@@ -25,19 +24,31 @@ function generateAllKeys(ethPrivateKey){
   return {ethPrivate, ethPublic, ethAddress, eosioPrivate, eosioPublic }
 }
 
-function eosioGetContractByAbi(abi) {
-  const types = eosjs.Serialize.getTypesFromAbi(eosjs.Serialize.createInitialTypes(), abi)
-  const actions = new Map();
-  for (const { name, type } of abi.actions) {
-      actions.set(name, eosjs.Serialize.getType(types, type))
-  }
-  return { types, actions };
+function serializeEosioTeleport(data){
+  const sb = new eosjs.Serialize.SerialBuffer({
+    textEncoder: new TextEncoder,
+    textDecoder: new TextDecoder
+  })
+  sb.pushNumberAsUint64(data.id)
+  sb.pushUint32(data.timestamp)
+  sb.pushName(data.from)
+  sb.pushAsset(data.quantity)
+  sb.push(data.chain_id)
+  sb.pushArray(fromHexString(data.eth_address))
+  // sb.pushName(data.eosio_contract)
+  // sb.pushUint32(parseInt(data.eosio_id.substring(0, 8), 16))
+  // return '0x' + toHexString(sb.array.slice(0, 81))
+  return '0x' + toHexString(sb.array.slice(0, 69))
 }
 
 // Note: The following keys are public. Use them only for testings!
 const TestSettings = {
+  EOSIO: {
+    contract_name: 'custombridge',
+    netId: 'e70aaab8997e1dfce58fbfac80cbbb8fecec7b99cf982a9444273cbc64c41473' 
+  },
   Token: {
-    symbol: "TLM",
+    symbol: 'TLM',
     totalSupply: 100000000000000,
     decimals: 4,
   },
@@ -59,7 +70,6 @@ const TestSettings = {
     eosio_name: 'hans',
     keys: generateAllKeys('7695855d7b7590c52a0af76ded6866724dea37f07e33e4545c9ea17a2740e529'),
   }],
-  eosioAbi: JSON.parse(fs.readFileSync('./test/teleporteos.abi', null).toString())
 }
 
 
@@ -95,271 +105,270 @@ contract('TeleportToken', (accounts) => {
     console.log(element.eosio_name, `${element.keys.ethAddress} ${element.keys.eosioPrivate}`)
   }
 
-  it('Total supply', async () => {
-    const instance = await TeleportToken.deployed()
-    const balance = await instance._totalSupply.call()
-    assert.equal(balance.valueOf(), TestSettings.Token.totalSupply, `Total supply is not ${TestSettings.Token.totalSupply}`)
+  let instance;
+  before("get deploy contract", async function () {
+    instance = await TeleportToken.deployed()
   })
+  describe("Total supply", function () {
+    it('should be the same as initially defined', async () => {
+      const balance = await instance._totalSupply.call()
+      assert.equal(balance.valueOf(), TestSettings.Token.totalSupply, `Total supply is not ${TestSettings.Token.totalSupply}`)
+    })
+  })
+  describe("Register oracles", function () {
+    it('should fail with unauthorized account', async () => {
+      
+      // Check test settings
+      assert.equal(TestSettings.oracles.length > 0, true, 'No oracles defined')
+      assert.equal(TestSettings.oracles.length > TestSettings.threshold, true, 'Need one more oracle for testing than threshold')
 
-  it('Register oracles', async () => {
-    const instance = await TeleportToken.deployed()
-    
-    // Check test settings
-    assert.equal(TestSettings.oracles.length > 0, true, 'No oracles defined')
-    assert.equal(TestSettings.oracles.length > TestSettings.threshold, true, 'Need one more oracle for testing than threshold')
-
-    // Check if someone else can register an oracle than owner
-    await catchRevert(instance.regOracle(TestSettings.oracles[0].keys.ethAddress, {from: accounts[3]}), 'Unauthorized oracle registration')
-    
-    // Register all oracles
-    for(let i = 0; i < TestSettings.oracles.length; i++){
-      await instance.regOracle(TestSettings.oracles[i].keys.ethAddress, {from: accounts[0]});
-      assert.equal(await instance.oracles(TestSettings.oracles[i].keys.ethAddress), true, 'Missing oracle' + i)
-    }
-
-    // Remove one oracle
-    let noOracle = TestSettings.oracles[TestSettings.oracles.length - 1].keys.ethAddress;
-    await instance.unregOracle(noOracle, {from: accounts[0]});
-    assert.equal(await instance.oracles(noOracle), false, 'Oracle is still registered')
-
-    // Check further unauthorized registrations
-    await catchRevert(instance.regOracle(noOracle, {from: accounts[3]}), 'Unauthorized registration of former oracle')
-    await catchRevert(instance.regOracle(TestSettings.oracles[0].keys.ethAddress, {from: accounts[0]}), 'Double registration of the same oracle')
+      // Check if someone else can register an oracle than owner
+      await catchRevert(instance.regOracle(TestSettings.oracles[0].keys.ethAddress, {from: accounts[3]}), 'Unauthorized oracle registration')
+    })
+    it('should succeed to register several oracles', async () => {
+      // Register all oracles
+      for(let i = 0; i < TestSettings.oracles.length; i++){
+        await instance.regOracle(TestSettings.oracles[i].keys.ethAddress, {from: accounts[0]});
+        assert.equal(await instance.oracles(TestSettings.oracles[i].keys.ethAddress), true, 'Missing oracle' + i)
+      }
+    })
+    let noOracle
+    it('should succeed to remove an oracle', async () => {
+      // Remove one oracle
+      noOracle = TestSettings.oracles[TestSettings.oracles.length - 1].keys.ethAddress;
+      await instance.unregOracle(noOracle, {from: accounts[0]});
+      assert.equal(await instance.oracles(noOracle), false, 'Oracle is still registered')
+    })
+    it('should fail to reg an oracle with former oracle', async () => {
+      await catchRevert(instance.regOracle(noOracle, {from: accounts[3]}), 'Unauthorized registration of former oracle')
+    })
+    it('should fail to reg an oracle twice', async () => {
+      await catchRevert(instance.regOracle(TestSettings.oracles[0].keys.ethAddress, {from: accounts[0]}), 'Double registration of the same oracle')
+    })
   })
   
-  let tokenAmount1 = 500000;
+  let tokenAmount1 = 500000
   const fullToken1 = Math.round(tokenAmount1/(10**TestSettings.Token.decimals))
-  it('Receive token from eosio chain', async () => {
-    const instance = await TeleportToken.deployed()
-
-    // Check initial state of token amounts
-    assert.equal(await instance.balanceOf.call(accounts[0]).valueOf(), 0, 'Balance of account 0 is not 0')
-    assert.equal(await instance.balanceOf.call(accounts[1]).valueOf(), 0, 'Balance of account 1 is not 0')
-    
-    // Check abi file
-    assert.equal(TestSettings.eosioAbi.actions.length > 0, true, "No actions in abi file")
-    
-    // Create example log data by abi definition
-    const eosioFromAcc = 'wololo'
+  describe("Receive token from eosio chain", function () {
+    // Create example log data
     const logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`
     const logData = {
       id: 0,                                                              // uint64
       timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
-      from: eosioFromAcc,                                                 // string account name
+      from: 'wololo',                                                     // string account name
       quantity: logAsset,                                                 // uint64
       chain_id: TestSettings.chainId,                                     // uint8
-      eth_address: accounts[1].substring(2) + '000000000000000000000000'  // address
+      eth_address: accounts[1].substring(2) + '000000000000000000000000', // address
+      eosio_contract: TestSettings.EOSIO.contract_name,                   // string account name
+      eosio_id: TestSettings.EOSIO.netId,                                 // string
     }
-    const logDataHexByAbi = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logData, new TextEncoder(), new TextDecoder());
-    
-    // Create example log data manually // logteleport(uint64_t id, uint32_t timestamp, name from, asset quantity, uint8_t chain_id, checksum256 eth_address)
-    const sb = new eosjs.Serialize.SerialBuffer({
-      textEncoder: new TextEncoder,
-      textDecoder: new TextDecoder
-    });
-    sb.pushNumberAsUint64(0);
-    sb.pushUint32(Math.round(new Date().getTime() / 1000));
-    sb.pushName(eosioFromAcc);
-    sb.pushAsset(logAsset);
-    sb.push(TestSettings.chainId);
-    sb.pushArray(fromHexString(accounts[1].substring(2) + '000000000000000000000000'));
-    const logDataHex = '0x' + toHexString(sb.array.slice(0, 69))
-
-    // Check if serialization by abi file and manually has the same results // Note: Second way is tested to use it in other js implementations
-    assert.equal(logDataHex.toLowerCase(), logDataHexByAbi.toLowerCase(), 'Generated example of a logteleport action hex does not match the definition in the abi file')
-    
-    // Check wrong signatures
-    let falseSignatures = [];
-    for(let i = 0; i < TestSettings.threshold; i++) {
-      const sig = signWithKey(TestSettings.oracles[i].keys.ethPrivate, ethUtil.keccak(Buffer(['1', '2', '3', '4'])))
-      falseSignatures.push(sig);
-    }
-    await catchRevert(instance.claim.call(logDataHex, falseSignatures, {from: accounts[1]}), 'Claim with false signatures')
-    
-    // Sign the example log data
-    let signatures = signWithTesSettings(logDataHex)
-
-    // Pay out the teleported tokens
-    await instance.claim(logDataHex, signatures, {from: accounts[2]});  // Claim by a different account is allowed
-    assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), 0, 'Wrong account got funds')
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), fullToken1 * (10 ** TestSettings.Token.decimals), 'Account 1 does not got the right amount of funds')
-
-    // Try to claim the same teleport again
-    await catchRevert(instance.claim(logDataHex, signatures, {from: accounts[2]}), 'It is possible claim the same teleport twice')
-
-    // Try to claim the same id
+    const logDataHex = serializeEosioTeleport(logData)
+    let signatures;
+    // Create claim data with same id as before
     let logDataTry = {
       id: 0,                                                              // uint64
       timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
-      from: eosioFromAcc,                                                 // string account name
+      from: 'wololo',                                                     // string account name
       quantity: logAsset,                                                 // uint64
       chain_id: TestSettings.chainId,                                     // uint8
-      eth_address: accounts[7].substring(2) + '000000000000000000000000'  // address
+      eth_address: accounts[7].substring(2) + '000000000000000000000000', // address
+      eosio_contract: TestSettings.EOSIO.contract_name,                   // string account name
+      eosio_id: TestSettings.EOSIO.netId,                                 // string
     }
-    let logDataHexTry = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logDataTry, new TextEncoder(), new TextDecoder());
+    let logDataHexTry = serializeEosioTeleport(logDataTry)
     let signaturesTry = signWithTesSettings(logDataHexTry)
-    await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an already used id')
+    
+    it('should have zero ballances at the beginning', async () => {
+      assert.equal(await instance.balanceOf.call(accounts[0]).valueOf(), 0, 'Balance of account 0 is not 0')
+      assert.equal(await instance.balanceOf.call(accounts[1]).valueOf(), 0, 'Balance of account 1 is not 0')
+    })
+    it('should fail to receive teleport with wrong signatures', async () => {   
+      // Check wrong signatures
+      let falseSignatures = [];
+      for(let i = 0; i < TestSettings.threshold; i++) {
+        const sig = signWithKey(TestSettings.oracles[i].keys.ethPrivate, ethUtil.keccak(Buffer(['1', '2', '3', '4'])))
+        falseSignatures.push(sig);
+      }
+      await catchRevert(instance.claim.call(logDataHex, falseSignatures, {from: accounts[1]}), 'Claim with false signatures')
+    });    
+    it('should succeed to claim a teleport', async () => {
+      // Sign the example log data
+      signatures = signWithTesSettings(logDataHex)
 
-    // Try to claim a unkown chain
-    logDataTry.id = 1
-    logDataTry.chain_id = TestSettings.chainId + 1
-    logDataHexTry = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logDataTry, new TextEncoder(), new TextDecoder());
-    signaturesTry = signWithTesSettings(logDataHexTry)
-    await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an unknown chain id')
-
-    // Should succeed a second received teleport 
-    logDataTry.chain_id = TestSettings.chainId
-    logDataHexTry = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logDataTry, new TextEncoder(), new TextDecoder());
-    signaturesTry = signWithTesSettings(logDataHexTry)
-    instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]})
+      // Pay out the teleported tokens
+      await instance.claim(logDataHex, signatures, {from: accounts[2]});  // Claim by a different account is allowed
+      assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), 0, 'Wrong account got funds')
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), fullToken1 * (10 ** TestSettings.Token.decimals), 'Account 1 does not got the right amount of funds')
+    });
+    it('should fail to claim the same teleport twice', async () => {
+      await catchRevert(instance.claim(logDataHex, signatures, {from: accounts[2]}), 'It is possible claim the same teleport twice')
+    });
+    it('should fail to claim a teleport with already used id', async () => {
+      await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an already used id')
+    });
+    it('should fail to claim a teleport with an unknown chain id', async () => {
+      logDataTry.id = 1
+      logDataTry.chain_id = TestSettings.chainId + 1
+      logDataHexTry = serializeEosioTeleport(logDataTry)
+      signaturesTry = signWithTesSettings(logDataHexTry)
+      await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an unknown chain id')
+    });
+    it('should succeed to claim a second teleport', async () => {
+      // Should succeed a second received teleport 
+      logDataTry.chain_id = TestSettings.chainId
+      logDataHexTry = serializeEosioTeleport(logDataTry)
+      signaturesTry = signWithTesSettings(logDataHexTry)
+      instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]})
+    });
   });
-
-  it('Send token within the chain', async () => {
-    const instance = await TeleportToken.deployed();
-
-    // Check transfer tokens to yourself
-    await instance.transfer(accounts[1], tokenAmount1, {from: accounts[1]})
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Token amount changed by sending to yourself')
-    
-    // Check further unallowed transfer actions
-    await catchRevert(instance.transfer(accounts[2], tokenAmount1 + 3, {from: accounts[1]}), 'It is possible to send more tokens than available for an account')
-    assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), 0, 'It is possible to get more tokens from a sender than his balance is')
-    await catchRevert(instance.transfer(accounts[1], tokenAmount1, {from: accounts[3]}), 'It is possible to send tokens without a balance')
-
-    // Transfer tokens to another account
-    const balance1 = fullToken1 * (10 ** TestSettings.Token.decimals)
-    const sendAmount = balance1 / 5
-    await instance.transfer(accounts[2], sendAmount, {from: accounts[1]})
-    tokenAmount1 = balance1 - sendAmount
-    assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), sendAmount, 'Wrong account got funds')
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Token amount of sender account is not reduced')
+  describe("Send token within the chain", function () {
+    let approveAmount
+    let sendAmount
+    it('should succeed to transfer tokens to yourself', async () => {
+      await instance.transfer(accounts[1], tokenAmount1, {from: accounts[1]})
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Token amount changed by sending to yourself')
+    })
+    it('should fail to transfer with impossible amounts', async () => {
+      await catchRevert(instance.transfer(accounts[2], tokenAmount1 + 3, {from: accounts[1]}), 'It is possible to send more tokens than available for an account')
+      assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), 0, 'It is possible to get more tokens from a sender than his balance is')
+      await catchRevert(instance.transfer(accounts[1], tokenAmount1, {from: accounts[3]}), 'It is possible to send tokens without a balance')
+    })
+    it('should succeed to send tokens to another account', async () => {
+      const balance1 = fullToken1 * (10 ** TestSettings.Token.decimals)
+      const sendAmount = balance1 / 5
+      await instance.transfer(accounts[2], sendAmount, {from: accounts[1]})
+      tokenAmount1 = balance1 - sendAmount
+      assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), sendAmount, 'Wrong account got funds')
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Token amount of sender account is not reduced')
+      approveAmount = tokenAmount1 / 5
+    })
+    it('should approve some tokens for another account', async () => {
+      await instance.approve(accounts[3], approveAmount, {from: accounts[1]})
+      assert.equal((await instance.balanceOf.call(accounts[3])).valueOf(), 0, 'Account should get rights not funds')
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Account lost funds')
+      sendAmount = approveAmount / 2
+    })
+    it('should succeed to send tokens by an approved account', async () => {
+      await instance.transferFrom(accounts[1], accounts[4], sendAmount, {from: accounts[3]})
+      tokenAmount1 -= sendAmount
+      assert.equal((await instance.balanceOf.call(accounts[3])).valueOf(), 0, 'Account should not get funds by sending them to someone else')
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Owner has wrong balance amount')
+      assert.equal((await instance.balanceOf.call(accounts[4])).valueOf(), sendAmount, 'Receiver got not the right amount of funds')
+    })
+    it('should fail to send approved tokens with wrong parameters', async () => {
+      await catchRevert(instance.transferFrom(accounts[1], accounts[5], 1, {from: accounts[2]}), 'It is possible to send tokens without the rights')
+      await catchRevert(instance.transferFrom(accounts[1], accounts[5], sendAmount + 3, {from: accounts[3]}), 'It is possible to send more tokens than approved')
+    })
+    it('should succeed to remove approve rights', async () => {
+      await instance.approve(accounts[3], 0, {from: accounts[1]})
+      assert.equal((await instance.balanceOf.call(accounts[3])).valueOf(), 0, 'Account should not get funds by removing the approve')
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Owner has wrong balance amount after removing approve')
+      await catchRevert(instance.transferFrom(accounts[1], accounts[5], 1, {from: accounts[3]}), 'Can not remove the right to transfer tokens')
+    })
   })
-
-  it('Send token by authorized account within the chain', async () => {
-    const instance = await TeleportToken.deployed();
-    const approveAmount = tokenAmount1 / 5
-    
-    // Approve some tokens from account 1 for account 3
-    await instance.approve(accounts[3], approveAmount, {from: accounts[1]})
-    assert.equal((await instance.balanceOf.call(accounts[3])).valueOf(), 0, 'Account should get rights not funds')
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Account lost funds')
-    
-    // Send tokens to account 4 
-    const sendAmount = approveAmount / 2
-    await instance.transferFrom(accounts[1], accounts[4], sendAmount, {from: accounts[3]})
-    tokenAmount1 -= sendAmount
-    assert.equal((await instance.balanceOf.call(accounts[3])).valueOf(), 0, 'Account should not get funds by sending them to someone else')
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Owner has wrong balance amount')
-    assert.equal((await instance.balanceOf.call(accounts[4])).valueOf(), sendAmount, 'Receiver got not the right amount of funds')
-    
-    // Check unauthorized transferFrom actions
-    await catchRevert(instance.transferFrom(accounts[1], accounts[5], 1, {from: accounts[2]}), 'It is possible to send tokens without the rights')
-    await catchRevert(instance.transferFrom(accounts[1], accounts[5], sendAmount + 3, {from: accounts[3]}), 'It is possible to send more tokens than approved')
-
-    // Remove approve amount
-    await instance.approve(accounts[3], 0, {from: accounts[1]})
-    assert.equal((await instance.balanceOf.call(accounts[3])).valueOf(), 0, 'Account should not get funds by removing the approve')
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Owner has wrong balance amount after removing approve')
-    await catchRevert(instance.transferFrom(accounts[1], accounts[5], 1, {from: accounts[3]}), 'Can not remove the right to transfer tokens')
-  })
-  
-  it('Teleport to eosio chain', async () => {
-    const instance = await TeleportToken.deployed();
-
-    // Teleport tokens
-    const sendAmount = tokenAmount1 / 2
-    tokenAmount1 -= sendAmount
+  describe("Teleport to eosio chain", function () {
+    let sendAmount
+    let sendAmount2
     const receiveChainId = TestSettings.chainId + 1
-    await instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[1]});
-    assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Balance of account got not reduced')
-    assert.equal(await instance.indexes(receiveChainId), 1, `Wrong index fort teleports to chain ${receiveChainId}`);
-
-    await catchRevert(instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[6]}), 'Can teleport without any balance')
-
-    // Teleports to check indexes 
-    const sendAmount2 = tokenAmount1 / 10;
-    tokenAmount1 -= 3 * sendAmount2; 
     const secondReceiveChainId = TestSettings.chainId + 2
-    await instance.teleport('frauerdbeere', sendAmount2, secondReceiveChainId, {from: accounts[1]});
-    await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
-    await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
-    assert.equal(await instance.indexes(secondReceiveChainId), 1, `Wrong index fort teleports to chain ${secondReceiveChainId }`);
-    assert.equal(await instance.indexes(receiveChainId), 3, `Wrong index fort teleports to chain ${receiveChainId }`);
+    before("calc amounts for sending", async function () {
+      sendAmount = tokenAmount1 / 2
+      tokenAmount1 -= sendAmount
+    })
+    it('should succeed a teleport', async () => {
+      await instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[1]});
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), tokenAmount1, 'Balance of account got not reduced')
+      assert.equal(await instance.indexes(receiveChainId), 1, `Wrong index fort teleports to chain ${receiveChainId}`);
+    })
+    it('should fail teleport without any balance', async () => {
+      await catchRevert(instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[6]}), 'Can teleport without any balance')
+      sendAmount2 = tokenAmount1 / 10;
+      tokenAmount1 -= 3 * sendAmount2; 
+    })
+    it('should succeed further teleports with growing indexes', async () => {
+      await instance.teleport('frauerdbeere', sendAmount2, secondReceiveChainId, {from: accounts[1]});
+      await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
+      await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
+      assert.equal(await instance.indexes(secondReceiveChainId), 1, `Wrong index fort teleports to chain ${secondReceiveChainId }`);
+      assert.equal(await instance.indexes(receiveChainId), 3, `Wrong index fort teleports to chain ${receiveChainId }`);
+    })
   })
-  
-  it('Check freeze', async () => {
-    const instance = await TeleportToken.deployed()
-    const sendAmount = tokenAmount1 / 10
-      
-    // Unauthorized call of freez function
-    await catchRevert(instance.freeze(true, false, false, {from: accounts[3]}), "Unauthorized execution of freeze function");
-    
-    // Create new claim with signatures
-    const logData = {
+  describe("Check freeze", function () {
+    // Create new claim data with signatures
+    const logDataTry = {
       id: 1,
       timestamp: Math.round(new Date().getTime() / 1000),
       from: 'wololo',               
       quantity: `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`,
       chain_id: TestSettings.chainId,
-      eth_address: accounts[1].substring(2) + '000000000000000000000000'
+      eth_address: accounts[1].substring(2) + '000000000000000000000000',      
+      eosio_contract: TestSettings.EOSIO.contract_name,
+      eosio_id: TestSettings.EOSIO.netId,
     }
-    const logDataHexByAbi = '0x' + eosjs.Serialize.serializeActionData(eosioGetContractByAbi(TestSettings.eosioAbi), 'useless', 'logteleport', logData, new TextEncoder(), new TextDecoder());
-    let signatures = signWithTesSettings(logDataHexByAbi)
-
-    // Freeze only claim
-    await instance.freeze(true, false, false, {from: accounts[0]});
-    assert.equal(await instance.freezedClaim.call(), true, 'Claim is not freezed')
-    assert.equal(await instance.freezedTeleport.call(), false, 'Teleport is freezed')
-    assert.equal(await instance.freezedTransfer.call(), false, 'Transfer is freezed')
-    await catchRevert(instance.claim(logDataHexByAbi, signatures, {from: accounts[2]}), 'Can claim even it is freezed')
+    const logDataHex = serializeEosioTeleport(logDataTry)
+    let signatures = signWithTesSettings(logDataHex)
     
-    // Freeze only teleport
-    await instance.freeze(false, true, false, {from: accounts[0]});
-    assert.equal(await instance.freezedClaim.call(), false, 'Claim is freezed')
-    assert.equal(await instance.freezedTeleport.call(), true, 'Teleport is not freezed')
-    assert.equal(await instance.freezedTransfer.call(), false, 'Transfer is freezed')
-    await catchRevert(instance.teleport('frauerdbeere', sendAmount, TestSettings.chainId + 2, {from: accounts[1]}), 'Can teleport even it is freezed')
-    
-    // Freeze only transfer
-    await instance.freeze(false, false, true, {from: accounts[0]});
-    assert.equal(await instance.freezedClaim.call(), false, 'Claim is freezed')
-    assert.equal(await instance.freezedTeleport.call(), false, 'Teleport is freezed')
-    assert.equal(await instance.freezedTransfer.call(), true, 'Transfer not freezed')
-    await catchRevert(instance.transfer(accounts[1], sendAmount, {from: accounts[1]}), 'Can tranfer even it is freezed')
-
-    // Unfreeze transfer
-    await instance.freeze(false, false, false, {from: accounts[0]});
-
+    let sendAmount
+    before("calc amount for sending", async function () {
+      sendAmount = tokenAmount1 / 10 
+    })
+    it('should fail with unauthorized accound', async () => {
+      await catchRevert(instance.freeze(true, false, false, {from: accounts[3]}), "Unauthorized execution of freeze function");
+    })
+    it('shoudl succeed to freeze claim function ', async () => {
+      await instance.freeze(true, false, false, {from: accounts[0]});
+      assert.equal(await instance.freezedClaim.call(), true, 'Claim is not freezed')
+      assert.equal(await instance.freezedTeleport.call(), false, 'Teleport is freezed')
+      assert.equal(await instance.freezedTransfer.call(), false, 'Transfer is freezed')
+      await catchRevert(instance.claim(logDataHex, signatures, {from: accounts[2]}), 'Can claim even it is freezed')
+    })  
+    it('should succeed to freeze teleport function ', async () => {
+      await instance.freeze(false, true, false, {from: accounts[0]});
+      assert.equal(await instance.freezedClaim.call(), false, 'Claim is freezed')
+      assert.equal(await instance.freezedTeleport.call(), true, 'Teleport is not freezed')
+      assert.equal(await instance.freezedTransfer.call(), false, 'Transfer is freezed')
+      await catchRevert(instance.teleport('frauerdbeere', sendAmount, TestSettings.chainId + 2, {from: accounts[1]}), 'Can teleport even it is freezed')
+    })  
+    it('should succeed to freeze transfer function ', async () => {
+      await instance.freeze(false, false, true, {from: accounts[0]});
+      assert.equal(await instance.freezedClaim.call(), false, 'Claim is freezed')
+      assert.equal(await instance.freezedTeleport.call(), false, 'Teleport is freezed')
+      assert.equal(await instance.freezedTransfer.call(), true, 'Transfer not freezed')
+      await catchRevert(instance.transfer(accounts[1], sendAmount, {from: accounts[1]}), 'Can tranfer even it is freezed')
+    })  
+    it('shoudl succeed to unfreeze all', async () => {
+      await instance.freeze(false, false, false, {from: accounts[0]});
+    })
   })
-
-  it('Transfer ownership', async () => {
-    const instance = await TeleportToken.deployed();
-
-    // Check current ownership
-    let owner = await instance.owner();
-    let newOwner = await instance.newOwner();
-    assert.equal(owner, accounts[0], 'Old owner is not account 0')
-    assert.equal(owner, accounts[0], 'NewOwner is at the beginning not account 0')
-
-    // Check unauthorized transfer of ownership
-    await catchRevert(instance.transferOwnership.call(accounts[5], {from: accounts[3]}), "Unauthorized transferOwnership")
-
-    // Transfer ownership
-    await instance.transferOwnership(accounts[5], {from:accounts[0]});
-    owner = await instance.owner();
-    newOwner = await instance.newOwner();
-    assert.equal(owner, accounts[0], 'TransferOwnership but owner should still be account 0')
-    assert.equal(newOwner, accounts[5], 'TransferOwnership but new owner is not account 5')
-
-    // Check unaothorized acceptation of ownership
-    await catchRevert(instance.acceptOwnership.call({from: accounts[3]}), "Unauthorized acceptOwnership")
-    await catchRevert(instance.acceptOwnership.call({from: accounts[0]}), "Unauthorized acceptOwnership by old owner")
-
-    // Accept ownership
-    await instance.acceptOwnership.call({from: accounts[5]})
-    owner = await instance.owner();
-    newOwner = await instance.newOwner();
-    assert.equal(owner, accounts[0], 'AcceptOwnership the new owner is not account 5')
-    assert.equal(newOwner, accounts[5], 'AcceptOwnership the newOwner variable must be account 5, too')
+  describe("Transfer ownership", function () {
+    let owner;
+    let newOwner;
+    it('should succeed to check current ownership', async () => {
+      owner = await instance.owner();
+      newOwner = await instance.newOwner();
+      assert.equal(owner, accounts[0], 'Old owner is not account 0')
+      assert.equal(owner, accounts[0], 'NewOwner is at the beginning not account 0')
+    })
+    it('should fail with unaothorized account', async () => {
+      await catchRevert(instance.transferOwnership.call(accounts[5], {from: accounts[3]}), "Unauthorized transferOwnership")
+    })
+    it('should succeed to set new ownership', async () => {
+      await instance.transferOwnership(accounts[5], {from:accounts[0]});
+      owner = await instance.owner();
+      newOwner = await instance.newOwner();
+      assert.equal(owner, accounts[0], 'TransferOwnership but owner should still be account 0')
+      assert.equal(newOwner, accounts[5], 'TransferOwnership but new owner is not account 5')
+    })
+    it('should fail to accept ownership by unaothorized accounts', async () => {
+      await catchRevert(instance.acceptOwnership.call({from: accounts[3]}), "Unauthorized acceptOwnership")
+      await catchRevert(instance.acceptOwnership.call({from: accounts[0]}), "Unauthorized acceptOwnership by old owner")
+    })
+    it('should succeed to accept ownership', async () => {
+      await instance.acceptOwnership.call({from: accounts[5]})
+      owner = await instance.owner();
+      newOwner = await instance.newOwner();
+      assert.equal(owner, accounts[0], 'AcceptOwnership the new owner is not account 5')
+      assert.equal(newOwner, accounts[5], 'AcceptOwnership the newOwner variable must be account 5, too')
+    })
   })
 });

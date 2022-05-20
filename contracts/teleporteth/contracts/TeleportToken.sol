@@ -195,6 +195,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         uint64 symbolRaw;
         uint8 chainId;
         address toAddress;
+        // uint64 fromContract;
+        // uint32 fromChain;
     }
 
     // ------------------------------------------------------------------------
@@ -334,16 +336,19 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         uint64 symbolRaw;
         uint8 chainId;
         address toAddress;
+        // uint64 fromContract;
+        // uint32 fromChain;
 
         assembly {
-            id := mload(add(add(sigData, 0x8), 0))
-            ts := mload(add(add(sigData, 0x4), 8))
-            fromAddr := mload(add(add(sigData, 0x8), 12))
-            quantity := mload(add(add(sigData, 0x8), 20))
-            symbolRaw := mload(add(add(sigData, 0x8), 28))
-            chainId := mload(add(add(sigData, 0x1), 36))
-            toAddress := mload(add(add(sigData, 0x14), 37))
-            //- Never use an oracle account for two contracts the contract name should be signed, too.
+            id := mload(add(add(sigData, 0x8), 0)) // + 8
+            ts := mload(add(add(sigData, 0x4), 8)) // + 12
+            fromAddr := mload(add(add(sigData, 0x8), 12)) // +20
+            quantity := mload(add(add(sigData, 0x8), 20)) // +28
+            symbolRaw := mload(add(add(sigData, 0x8), 28)) // +36
+            chainId := mload(add(add(sigData, 0x1), 36)) // +37
+            toAddress := mload(add(add(sigData, 0x14), 37)) // +57
+            // fromContract := mload(add(add(sigData, 0x8), 57)) // +65
+            // fromChain := mload(add(add(sigData, 0x4), 65))
         }
 
         td.id = Endian.reverse64(id);
@@ -353,6 +358,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         td.symbolRaw = Endian.reverse64(symbolRaw);
         td.chainId = chainId;
         td.toAddress = toAddress;
+        // td.fromContract = Endian.reverse64(fromContract);
+        // td.fromChain = Endian.reverse32(fromChain);
 
         require(thisChainId == td.chainId, "Invalid Chain ID");
         require(block.timestamp < td.ts + (60 * 60 * 24 * 30), "Teleport has expired");

@@ -198,7 +198,7 @@ ACTION teleporteos::cancel(uint64_t id) {
 }
 
 ACTION teleporteos::logteleport(uint64_t id, uint32_t timestamp, name from, asset quantity, uint8_t chain_id, checksum256 eth_address) {
-  // Logs the teleport id for the oracle to listen to
+  // Logs the teleport id. This contract name is defined in the transaction
   require_auth(get_self());
 }
 
