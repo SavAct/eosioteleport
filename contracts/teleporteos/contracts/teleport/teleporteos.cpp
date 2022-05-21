@@ -139,18 +139,31 @@ inline void teleporteos::checkChain(uint8_t chain_id, stats_table::const_iterato
   check(chain->second.top <= index, "This teleport is already completed");
 }
 
-ACTION teleporteos::addchain(string name, string abbreviation, uint8_t chain_id, string net_id, string teleaddr, string tokenaddr){
+ACTION teleporteos::addchain(string name, string abbreviation, uint8_t chain_id, string net_id, string teleaddr, string tokenaddr, uint64_t completed_index){
   require_auth(get_self());
   auto stat = _stats.find(TOKEN_SYMBOL.raw());
 
+  // Find the last completed teleport of chain which should be added. 
+  // Note: If there are to much to run them in time, then you have to delete old entries first
+  receipts_table _receipts(get_self(), get_self().value);
+  auto itr = _receipts.rbegin();
+  while(itr != _receipts.rend()){
+    if(itr->chain_id == chain_id && itr->completed){
+      check(itr->index < completed_index, "The index is below completed entries");
+    }
+    itr++;
+  } 
+
+  // Create chain object
   chainData chain;
-  chain.top = 0;
+  chain.top = completed_index;
   chain.name = name;
   chain.abbreviation = abbreviation;
   chain.net_id = net_id;
   chain.teleaddr = teleaddr;
   chain.tokenaddr = tokenaddr;
 
+  // Add stats chain entry
   std::pair<map<uint8_t,chainData>::iterator,bool> ret;
   _stats.modify(*stat, get_self(), [&](auto &s) {
     ret = s.chains.insert(std::pair<uint8_t,chainData>(chain_id, chain));
@@ -265,7 +278,7 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
     });
   } else {
     if (confirmed) {
-      check(!receipt->completed, "This teleport is already completed"); // TODO: No use of this entry, because completed received teleports are count up 
+      check(!receipt->completed, "This teleport is already completed");
 
       check(receipt->quantity == quantity, "Quantity mismatch");
       check(receipt->to == to, "Account mismatch");
@@ -281,7 +294,7 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
           auto chain = s.chains.find(chain_id);
           check(chain != s.chains.end(), "This chain id is not available");
           check(chain->second.top <= index, "This teleport is already completed");
-          check(chain->second.top == index, "Has to confirm previous teleports first.");
+          check(chain->second.top == index, "Has to confirm previous teleports first");
           chain->second.top++;
 
           // Pay fee
@@ -303,8 +316,6 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
         r.approvers.push_back(oracle_name);
         r.completed = completed;
       });
-
-      // TODO: Delete all other receiving teleports with the same index
     } else {
       check(false, "Another oracle has already registered teleport");
     }

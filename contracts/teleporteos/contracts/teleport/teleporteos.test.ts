@@ -80,7 +80,7 @@ describe('teleporteos', async () => {
     context('without correct auth', async () => {
       it('should fail with auth error ac1', async () => {
         await assertMissingAuthority(
-          teleporteos.addchain('Ethereum', 'ETH', 1, '1', '0x497329439abdc323u497329439abdc323u', '0x497329439abdc323u497329439abdc323u', { from: sender1 })
+          teleporteos.addchain('Ethereum', 'ETH', 1, '1', '0x497329439abdc323u497329439abdc323u', '0x497329439abdc323u497329439abdc323u', 0, { from: sender1 })
         )
       })
     })
@@ -93,7 +93,7 @@ describe('teleporteos', async () => {
       const ethTokenContract = '0x557329439abdc323u497329439abdc3266'
 
       it('should succeed ac2', async () => {
-        await teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, { from: teleporteos.account })
+        await teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 0, { from: teleporteos.account })
       })
       it('should update stats table ac3', async () => {
         const { rows: [item] } = await teleporteos.statsTable()
@@ -107,16 +107,16 @@ describe('teleporteos', async () => {
       })
       it('should fail with already existing id ac4', async () => {
         await assertEOSErrorIncludesMessage(
-          teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, { from: teleporteos.account }), 
+          teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 0, { from: teleporteos.account }), 
           'This chain is already listed'
         )
       })
       it('should succeed to add another three chains ac5', async () => {
-        await teleporteos.addchain('Binance Smart Chain', 'BSC', 2, '2', ethContract, ethTokenContract, { from: teleporteos.account })
-        await teleporteos.addchain('WAX', 'WAX', 6, '6', 'bridge.chain', 'my.token', { from: teleporteos.account })
-        await teleporteos.addchain('Bitcoin', 'BTC', 3, '3', ethContract, ethTokenContract, { from: teleporteos.account })
-        await teleporteos.addchain('TRON', 'TRON', 4, '4', ethContract, ethTokenContract, { from: teleporteos.account })
-        await teleporteos.addchain('XMR', 'XMR', 5, '5', ethContract, ethTokenContract, { from: teleporteos.account })
+        await teleporteos.addchain('Binance Smart Chain', 'BSC', 2, '2', ethContract, ethTokenContract, 0, { from: teleporteos.account })
+        await teleporteos.addchain('WAX', 'WAX', 6, '6', 'bridge.chain', 'my.token', 0, { from: teleporteos.account })
+        await teleporteos.addchain('Bitcoin', 'BTC', 3, '3', ethContract, ethTokenContract, 0, { from: teleporteos.account })
+        await teleporteos.addchain('TRON', 'TRON', 4, '4', ethContract, ethTokenContract, 0, { from: teleporteos.account })
+        await teleporteos.addchain('XMR', 'XMR', 5, '5', ethContract, ethTokenContract, 0, { from: teleporteos.account })
       })
       it('should update stats table ac6', async () => {
         const { rows: [item] } = await teleporteos.statsTable()

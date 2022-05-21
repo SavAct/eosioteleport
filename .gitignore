@@ -6,3 +6,8 @@ eosio.token.ts
 contracts/teleporteos/artifacts
 build
 node_modules
+.eosproj
+.secret
+*.code-workspace
+teleporteos.abi
+teleporteos.wasm

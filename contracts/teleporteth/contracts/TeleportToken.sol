@@ -2,11 +2,9 @@ pragma solidity ^0.8.13;
 /*
  * SPDX-License-Identifier: MIT
  */
-// pragma abicoder v2;  // Activated by default in 0.8
-
+ 
 // Verification of externally created ECDSA signatures in Solidity: https://gist.github.com/BjornvdLaan/e41d292339bbdebb831d0b976e1804e8
 contract Verify {
-
   function recoverSigner(bytes32 message, bytes memory sig) public pure returns (address) {
        uint8 v;
        bytes32 r;
@@ -166,8 +164,29 @@ contract Oracled is Owned {
 // ----------------------------------------------------------------------------
 contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
 
+    struct TeleportData {
+        uint64 id;
+        uint32 ts;
+        // uint64 fromAddr;     // does not need to be interpreted
+        uint64 quantity;
+        // uint64 symbolRaw;    // does not need to be send
+        // uint8 chainId;       // does not need to be send
+        address toAddress;
+        // uint64 fromContract; // does not need to be send
+        bytes4 fromChain;
+        uint8 fromChainId;
+    }
+
+    struct Chain {
+        uint64 contract_name;
+        bytes32 netId;
+        bool active;
+        uint8 chainId;
+    }
+
     string public symbol;
-    string public  name;
+    string public name;
+    uint64 private _revSymbolRaw;
     uint8 public decimals;
     uint8 public threshold;
     uint8 public thisChainId;
@@ -180,38 +199,51 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     mapping(address => mapping(address => uint)) allowed;
 
     mapping(uint64 => mapping(address => bool)) signed;
-    mapping(uint64 => bool) public claimed;
+    mapping(bytes32 => mapping(uint64 => bool)) public claimed;
 
     mapping(uint8 => uint64) public indexes;
+    mapping(bytes32 => Chain) public chains;
+    mapping(uint8 => bytes32) private chainNetId;
 
     event Teleport(address indexed from, string to, uint tokens, uint8 chainId, uint64 index);
-    event Claimed(uint64 id, address to, uint tokens);
-
-    struct TeleportData {
-        uint64 id;
-        uint32 ts;
-        uint64 fromAddr;
-        uint64 quantity;
-        uint64 symbolRaw;
-        uint8 chainId;
-        address toAddress;
-        // uint64 fromContract;
-        // uint32 fromChain;
-    }
+    event Claimed(uint8 fromChainId, uint64 id, address to, uint tokens);
 
     // ------------------------------------------------------------------------
     // Constructor
     // ------------------------------------------------------------------------
     constructor() {
-        symbol = "TLM";
-        name = "Alien Worlds Trilium";
-        decimals = 4;
-        _totalSupply = 10000000000 * (10**uint(decimals));
-        balances[address(0)] = _totalSupply;
+        symbol = "SAVACT";                                  // EOSIO token symbol name
+        name = "SavAct System Token";
+        decimals = 4;                                       // EOSIO token symbol precision
+        _totalSupply = 10000000000 * (10**uint(decimals));  // Total supply of the EOSIO token
         threshold = 3;
         thisChainId = 2;
+
+        balances[address(0)] = _totalSupply;
+        _revSymbolRaw = Endian.reverse64(string_to_symbol_c(decimals, symbol));
     }
 
+    function addChain(bytes32 netId, uint64 contract_name, uint8 chainId, uint64 telIndex) public onlyOwner returns (bool success){
+        Chain storage c = chains[bytes4(netId)];
+        Chain storage cByChainId = chains[chainNetId[chainId]];
+        require(!c.active, "Chain is already active");
+        require(chainId != thisChainId, "Chain id is used by this chain");
+        require(!cByChainId.active, "Chain id is used by another chain");
+        c.netId = netId;
+        c.contract_name = contract_name;
+        c.chainId = chainId;
+        chainNetId[chainId] = bytes4(netId);
+        indexes[chainId] = telIndex;
+        c.active = true;
+        return true;
+    }
+
+    function rmChain(bytes32 netId) public onlyOwner returns (bool success){
+        Chain storage c = chains[bytes4(netId)];
+        require(c.active, "Chain is not active");
+        c.active = false;
+        return true;
+    }
     // ------------------------------------------------------------------------
     // Total supply
     // ------------------------------------------------------------------------
@@ -305,7 +337,6 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // tokens : number of tokens in satoshis
     // chainId : The chain id that they will be sent to
     // ------------------------------------------------------------------------
-
     function teleport(string memory to, uint tokens, uint8 chainid) public returns (bool success) {
         if(freezedTeleport){
             revert();
@@ -324,8 +355,6 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // ------------------------------------------------------------------------
     // Claim tokens sent using signatures supplied to the other chain
     // ------------------------------------------------------------------------
-
-
     function verifySigData(bytes memory sigData) private returns (TeleportData memory) {
         TeleportData memory td;
 
@@ -335,40 +364,65 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         uint64 quantity;
         uint64 symbolRaw;
         uint8 chainId;
+        uint64 fromContract;
+        uint32 fromChain;
         address toAddress;
-        // uint64 fromContract;
-        // uint32 fromChain;
 
         assembly {
-            id := mload(add(add(sigData, 0x8), 0)) // + 8
-            ts := mload(add(add(sigData, 0x4), 8)) // + 12
-            fromAddr := mload(add(add(sigData, 0x8), 12)) // +20
-            quantity := mload(add(add(sigData, 0x8), 20)) // +28
-            symbolRaw := mload(add(add(sigData, 0x8), 28)) // +36
-            chainId := mload(add(add(sigData, 0x1), 36)) // +37
-            toAddress := mload(add(add(sigData, 0x14), 37)) // +57
-            // fromContract := mload(add(add(sigData, 0x8), 57)) // +65
-            // fromChain := mload(add(add(sigData, 0x4), 65))
+            id := mload(add(add(sigData, 0x8), 0))
+            ts := mload(add(add(sigData, 0x4), 8))
+            fromAddr := mload(add(add(sigData, 0x8), 12))       // not used
+            quantity := mload(add(add(sigData, 0x8), 20))
+            symbolRaw := mload(add(add(sigData, 0x8), 28))
+            chainId := mload(add(add(sigData, 0x1), 36))
+            fromContract := mload(add(add(sigData, 0x8), 37))   // not used
+            fromChain := mload(add(add(sigData, 0x4), 45))      
+            toAddress := mload(add(add(sigData, 0x14), 49))
         }
 
         td.id = Endian.reverse64(id);
         td.ts = Endian.reverse32(ts);
-        td.fromAddr = Endian.reverse64(fromAddr);
         td.quantity = Endian.reverse64(quantity);
-        td.symbolRaw = Endian.reverse64(symbolRaw);
-        td.chainId = chainId;
         td.toAddress = toAddress;
+        td.fromChain = bytes4(fromChain);
+
+        // Some not used parameters in origin TeleportData
+        // td.fromAddr = Endian.reverse64(fromAddr);
+        // td.symbolRaw = Endian.reverse64(symbolRaw);  
+        // td.chainId = chainId;                        
         // td.fromContract = Endian.reverse64(fromContract);
-        // td.fromChain = Endian.reverse32(fromChain);
 
-        require(thisChainId == td.chainId, "Invalid Chain ID");
+        require(thisChainId == chainId, "Invalid chain id");
         require(block.timestamp < td.ts + (60 * 60 * 24 * 30), "Teleport has expired");
+        require(symbolRaw == _revSymbolRaw, "Invalid token");
+        
+        Chain storage c = chains[td.fromChain];
+        require(c.active, "Invalid sender net id");
+        require(c.contract_name == fromContract,"Invalid sender contract name");
 
-        require(!claimed[td.id], "Already Claimed");
+        require(!claimed[td.fromChain][td.id], "Already Claimed");
 
-        claimed[td.id] = true;
+        td.fromChainId = c.chainId;
+        claimed[td.fromChain][td.id] = true;
 
         return td;
+    }
+    
+    // ------------------------------------------------------------------------
+    // Convert symbol parameters to EOSIO SymbolRaw
+    // https://github.com/EOSIO/eos/blob/master/libraries/chain/include/eosio/chain/symbol.hpp
+    // ------------------------------------------------------------------------
+    function string_to_symbol_c(uint8 precision, string storage str) private view returns (uint64) {
+        bytes storage strbytes = bytes(str);
+        uint32 len = uint32(strbytes.length);
+
+        uint64 result;
+        for (uint32 i = 0; i < len; ++i) {
+            result |= (uint64(uint8(strbytes[i])) << (8*(1+i)));
+        }
+
+        result |= uint64(precision);
+        return result;
     }
 
     function claim(bytes memory sigData, bytes[] calldata signatures) public returns (address toAddress) {
@@ -379,8 +433,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
 
         TeleportData memory td = verifySigData(sigData);
 
-        // verify signatures
-        require(sigData.length == 69, "Signature data is the wrong size");
+        // Verify signatures
+        require(sigData.length == 81 || sigData.length == 69, "Signature data has the wrong size");
         require(signatures.length <= 10, "Maximum of 10 signatures can be provided");
 
         bytes32 message = keccak256(sigData);
@@ -390,14 +444,10 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         for (uint8 i = 0; i < signatures.length; i++){
             address potential = Verify.recoverSigner(message, signatures[i]);
 
-            // Check that they are an oracle and they haven't signed twice
-            if (oracles[potential] && !signed[td.id][potential]){       //- This !signed[td.id][potential] should be within this condition, otherwise numberSigs will never be reached if one oragle changed before other has signed
+            // Check that they are oracles which are registered and haven't signed twice
+            if (oracles[potential] && !signed[td.id][potential]){
                 signed[td.id][potential] = true;
                 numberSigs++;
-
-                if (numberSigs >= 10){  //- Never happens, because i < signatures.length <= 10
-                    break;
-                }
             }
         }
 
@@ -406,7 +456,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         balances[address(0)] = balances[address(0)] - td.quantity;
         balances[td.toAddress] = balances[td.toAddress] + td.quantity;
         emit Transfer(address(0), td.toAddress, td.quantity);
-        emit Claimed(td.id, td.toAddress, td.quantity);
+        emit Claimed(td.fromChainId, td.id, td.toAddress, td.quantity);
 
         return td.toAddress;
     }

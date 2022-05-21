@@ -24,6 +24,15 @@ function generateAllKeys(ethPrivateKey){
   return {ethPrivate, ethPublic, ethAddress, eosioPrivate, eosioPublic }
 }
 
+function getEosioAccountValue(name){
+  const sb = new eosjs.Serialize.SerialBuffer({
+    textEncoder: new TextEncoder,
+    textDecoder: new TextDecoder
+  })
+  sb.pushName(name)
+  return BigInt('0x' + toHexString(sb.array.slice(0, 8)))
+}
+
 function serializeEosioTeleport(data){
   const sb = new eosjs.Serialize.SerialBuffer({
     textEncoder: new TextEncoder,
@@ -34,11 +43,10 @@ function serializeEosioTeleport(data){
   sb.pushName(data.from)
   sb.pushAsset(data.quantity)
   sb.push(data.chain_id)
+  sb.pushName(data.eosio_contract)
+  sb.pushUint8ArrayChecked(fromHexString(data.eosio_id.substring(0, 8)), 4)
   sb.pushArray(fromHexString(data.eth_address))
-  // sb.pushName(data.eosio_contract)
-  // sb.pushUint32(parseInt(data.eosio_id.substring(0, 8), 16))
-  // return '0x' + toHexString(sb.array.slice(0, 81))
-  return '0x' + toHexString(sb.array.slice(0, 69))
+  return '0x' + toHexString(sb.array.slice(0, 81))
 }
 
 // Note: The following keys are public. Use them only for testings!
@@ -48,7 +56,7 @@ const TestSettings = {
     netId: 'e70aaab8997e1dfce58fbfac80cbbb8fecec7b99cf982a9444273cbc64c41473' 
   },
   Token: {
-    symbol: 'TLM',
+    symbol: 'SAVACT',
     totalSupply: 100000000000000,
     decimals: 4,
   },
@@ -115,9 +123,56 @@ contract('TeleportToken', (accounts) => {
       assert.equal(balance.valueOf(), TestSettings.Token.totalSupply, `Total supply is not ${TestSettings.Token.totalSupply}`)
     })
   })
+  let addChain1NetId, addChain2NetId
+  let addChain1ShortNetId, addChain2ShortNetId
+  let addChain2ContractName
+  let addChain1Contract, addChain2Contract
+  describe("Add chain", function () {
+    before('Create chain parameters', async () => {
+      addChain2ContractName = 'andreas'
+      addChain1NetId = '0x' + TestSettings.EOSIO.netId;
+      addChain1ShortNetId = addChain1NetId.substring(0, 10)
+      addChain1Contract = getEosioAccountValue(TestSettings.EOSIO.contract_name)
+      addChain2NetId= '0x' + 'aa0aaab8997e1dfce58fbfac80cbbb8fecec7b99cf982a9444273cbc64c414aa';
+      addChain2ShortNetId = addChain2NetId.substring(0, 10)
+      addChain2Contract = getEosioAccountValue(addChain2ContractName)
+    })
+    it('should fail without authorization', async () => {
+      await catchRevert(instance.addChain(addChain1NetId, addChain1Contract, 0, 0, {from: accounts[3]}), 'Unauthorized chain registration')
+    })
+    it('should succeed to add a chain', async () => {
+      await instance.addChain(addChain1NetId, addChain1Contract, 0, 0, {from: accounts[0]})
+      let chain = await instance.chains(addChain1ShortNetId);
+      assert.equal(chain.netId, addChain1NetId, 'Wrong net id of added chain')
+      assert.equal(chain.contract_name, addChain1Contract, 'Wrong eosio contract name')
+      assert.equal(chain.active, true, 'Added chain is not active')
+    })
+    it('should fail to add the same chain with different contract and different chain id', async () => {
+      await catchRevert(instance.addChain(addChain1NetId, addChain2Contract, 1, 0, {from: accounts[0]}), 'Add the same chain twice')
+    })
+    it('should fail to add the another chain with same chain id', async () => {
+      await catchRevert(instance.addChain(addChain2NetId, addChain2Contract, 0, 0, {from: accounts[0]}), 'Add the same chain id twice')
+    })
+    it('should succeed to add another chain', async () => {
+      await instance.addChain(addChain2NetId, addChain2Contract, 1, 0,{from: accounts[0]})
+      let chain = await instance.chains(addChain2ShortNetId);
+      assert.equal(chain.netId, addChain2NetId, 'Wrong net id of added chain')
+      assert.equal(chain.contract_name, addChain2Contract, 'Wrong eosio contract name')
+      assert.equal(chain.active, true, 'Added chain is not active')
+    })
+  })
+  describe("Remove chain", function () {
+    it('should fail without authorization', async () => {
+      await catchRevert(instance.rmChain(addChain2NetId, {from: accounts[3]}), 'Unauthorized chain registration')
+    })
+    it('should succeed to add a chain', async () => {
+      await instance.rmChain(addChain2NetId, {from: accounts[0]})
+      let chain = await instance.chains(addChain1ShortNetId);
+      assert.equal(chain.active, true, 'Removed chain is still active')
+    })
+  })
   describe("Register oracles", function () {
     it('should fail with unauthorized account', async () => {
-      
       // Check test settings
       assert.equal(TestSettings.oracles.length > 0, true, 'No oracles defined')
       assert.equal(TestSettings.oracles.length > TestSettings.threshold, true, 'Need one more oracle for testing than threshold')
@@ -150,34 +205,53 @@ contract('TeleportToken', (accounts) => {
   let tokenAmount1 = 500000
   const fullToken1 = Math.round(tokenAmount1/(10**TestSettings.Token.decimals))
   describe("Receive token from eosio chain", function () {
-    // Create example log data
-    const logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`
-    const logData = {
-      id: 0,                                                              // uint64
-      timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
-      from: 'wololo',                                                     // string account name
-      quantity: logAsset,                                                 // uint64
-      chain_id: TestSettings.chainId,                                     // uint8
-      eth_address: accounts[1].substring(2) + '000000000000000000000000', // address
-      eosio_contract: TestSettings.EOSIO.contract_name,                   // string account name
-      eosio_id: TestSettings.EOSIO.netId,                                 // string
-    }
-    const logDataHex = serializeEosioTeleport(logData)
-    let signatures;
-    // Create claim data with same id as before
-    let logDataTry = {
-      id: 0,                                                              // uint64
-      timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
-      from: 'wololo',                                                     // string account name
-      quantity: logAsset,                                                 // uint64
-      chain_id: TestSettings.chainId,                                     // uint8
-      eth_address: accounts[7].substring(2) + '000000000000000000000000', // address
-      eosio_contract: TestSettings.EOSIO.contract_name,                   // string account name
-      eosio_id: TestSettings.EOSIO.netId,                                 // string
-    }
-    let logDataHexTry = serializeEosioTeleport(logDataTry)
-    let signaturesTry = signWithTesSettings(logDataHexTry)
-    
+    let logAsset
+    let logData, logData2, logDataTry
+    let logDataHex, logDataHex2, logDataHexTry
+    let signatures, signatures2, signaturesTry
+    before('Calc claim data', async () => {
+      // Create example log data
+      logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`
+      logData = {
+        id: 0,                                                              // uint64
+        timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
+        from: 'wololo',                                                     // string account name
+        quantity: logAsset,                                                 // uint64
+        chain_id: TestSettings.chainId,                                     // uint8
+        eosio_contract: TestSettings.EOSIO.contract_name,                   // string account name
+        eosio_id: TestSettings.EOSIO.netId,                                 // string
+        eth_address: accounts[1].substring(2) + '000000000000000000000000', // address
+      }
+      logDataHex = serializeEosioTeleport(logData)
+      signatures = signWithTesSettings(logDataHex)
+      // Create example log data of invalid chain
+      logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`
+      logData2 = {
+        id: 0,                                                              // uint64
+        timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
+        from: 'wololo',                                                     // string account name
+        quantity: logAsset,                                                 // uint64
+        chain_id: TestSettings.chainId,                                     // uint8
+        eosio_contract: addChain2ContractName,                                  // string account name
+        eosio_id: addChain2NetId,                                           // string
+        eth_address: accounts[1].substring(2) + '000000000000000000000000', // address
+      }
+      logDataHex2 = serializeEosioTeleport(logData2)
+      signatures2 = signWithTesSettings(logDataHex2)
+      // Create claim data with same id as before
+      logDataTry = {
+        id: 0,                                                              // uint64
+        timestamp: Math.round(new Date().getTime() / 1000),                 // uint32
+        from: 'wololo',                                                     // string account name
+        quantity: logAsset,                                                 // uint64
+        chain_id: TestSettings.chainId,                                     // uint8
+        eosio_contract: TestSettings.EOSIO.contract_name,                   // string account name
+        eosio_id: TestSettings.EOSIO.netId,                                 // string
+        eth_address: accounts[7].substring(2) + '000000000000000000000000', // address
+      }
+      logDataHexTry = serializeEosioTeleport(logDataTry)
+      signaturesTry = signWithTesSettings(logDataHexTry)
+    })
     it('should have zero ballances at the beginning', async () => {
       assert.equal(await instance.balanceOf.call(accounts[0]).valueOf(), 0, 'Balance of account 0 is not 0')
       assert.equal(await instance.balanceOf.call(accounts[1]).valueOf(), 0, 'Balance of account 1 is not 0')
@@ -190,12 +264,11 @@ contract('TeleportToken', (accounts) => {
         falseSignatures.push(sig);
       }
       await catchRevert(instance.claim.call(logDataHex, falseSignatures, {from: accounts[1]}), 'Claim with false signatures')
+    });
+    it('should fail to receive teleport with inactive chain', async () => {   
+      await catchRevert(instance.claim.call(logDataHex2, signatures2, {from: accounts[2]}), 'Claim with inactive chain')
     });    
     it('should succeed to claim a teleport', async () => {
-      // Sign the example log data
-      signatures = signWithTesSettings(logDataHex)
-
-      // Pay out the teleported tokens
       await instance.claim(logDataHex, signatures, {from: accounts[2]});  // Claim by a different account is allowed
       assert.equal((await instance.balanceOf.call(accounts[2])).valueOf(), 0, 'Wrong account got funds')
       assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), fullToken1 * (10 ** TestSettings.Token.decimals), 'Account 1 does not got the right amount of funds')
