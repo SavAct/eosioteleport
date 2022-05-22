@@ -38,6 +38,7 @@ describe('teleporteos', async () => {
   before(async () => {
     await seedAccounts()
   })
+
   // Initialize contract
   context('initialize contract (i/4)', async () => {
     context('without correct auth', async () => {
@@ -75,6 +76,7 @@ describe('teleporteos', async () => {
       })
     })
   })
+
   // Add chains
   context('add chain (ac/6)', async () => {
     context('without correct auth', async () => {
@@ -91,7 +93,6 @@ describe('teleporteos', async () => {
       const ethNetId = '1'
       const ethContract = '0x497329439abdc323u497329439abdc323u'
       const ethTokenContract = '0x557329439abdc323u497329439abdc3266'
-
       it('should succeed ac2', async () => {
         await teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 0, { from: teleporteos.account })
       })
@@ -124,6 +125,7 @@ describe('teleporteos', async () => {
       })
     })
   })
+
   // Remove chain
   context('remove chain (rc/3)', async () => {
     context('without correct auth', async () => {
@@ -143,6 +145,7 @@ describe('teleporteos', async () => {
       })
     })
   })
+
   // Recoracle
   context('regoracle (ro/6)', async () => {
     context('without correct auth', async () => {
@@ -1102,6 +1105,76 @@ describe('teleporteos', async () => {
       chai.expect(receipts.rows[0].id).equal(1, 'Wrong deletion')
       chai.expect(receipts.rows[1].id).equal(6, 'Wrong deletion')
     })
+  })
+})
+
+context('add chains and check indexes (ci/11)', async () => {
+  const ethName = 'Ethereum'
+  const ethShortName = 'ETH'
+  const ethId = 1
+  const ethNetId = '1'
+  const ethContract = '0x497329439abdc323u497329439abdc323u'
+  const ethTokenContract = '0x557329439abdc323u497329439abdc3266'
+  const examplehash = 'aabb11111111111111111111111111111111111111111111111111111111bbaa'
+  const examplehash2 = 'ccbb11111111111111111111111111111111111111111111111111111111bbcc'
+  it('should succeed to receive two confirmed teleports and one not confirmed ci1', async () => {
+    // Add two confirmed 
+    await teleporteos.received(oracle1.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 1, true, { from: oracle1 })
+    await teleporteos.received(oracle2.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 1, true, { from: oracle2 })
+    await teleporteos.received(oracle1.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 2, true, { from: oracle1 })
+    await teleporteos.received(oracle2.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 2, true, { from: oracle2 })
+    // Add one not confirmed
+    await teleporteos.received(oracle1.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 3, true, { from: oracle1 })
+  })
+  it('should succeed to remove the first chain ci2', async () => {
+    await teleporteos.rmchain(1, { from: teleporteos.account })
+  })
+  it('should fail to receive a teleport from a removed chain ci3', async () => {
+    await assertEOSErrorIncludesMessage(
+      teleporteos.received(oracle1.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 4, true, { from: oracle1 }),
+      'This chain id is not available'
+    )
+  })
+  it('should fail to add a former chain with index zero ci4', async () => {
+    await assertEOSErrorIncludesMessage(
+    teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 0, { from: teleporteos.account }),
+    'The index is below completed entries'
+    )
+  })
+  it('should fail with index equal to last used one ci5', async () => {
+    await assertEOSErrorIncludesMessage(
+    teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 2, { from: teleporteos.account }),
+    'The index is below completed entries'
+    )
+  })
+  it('should succeed with next unconfirmed index ac6', async () => {
+    await teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 3, { from: teleporteos.account })
+  })
+  it('should succeed to remove the first chain again ci7', async () => {
+    await teleporteos.rmchain(1, { from: teleporteos.account })
+  })
+  it('should succeed with much higher index than before ac8', async () => {
+    await teleporteos.addchain(ethName, ethShortName, ethId, ethNetId, ethContract, ethTokenContract, 10, { from: teleporteos.account })
+  })
+
+  it('should fail to receive a teleport ci9', async () => {
+    await assertEOSErrorIncludesMessage( 
+      teleporteos.received(oracle1.name, sender1.name, examplehash2, `1.0000 ${token_symbol}`, 1, 4, true, { from: oracle1 }),
+      'This teleport is already completed'
+    )
+  })
+  it('should fail to receive a teleport ci10', async () => {
+    await assertEOSErrorIncludesMessage( 
+      teleporteos.received(oracle1.name, sender1.name, examplehash2, `1.0000 ${token_symbol}`, 1, 9, true, { from: oracle1 }),
+      'This teleport is already completed'
+    )
+  })
+  it('should succeed to receive a teleport ci11', async () => {
+    await teleporteos.received(oracle1.name, sender1.name, examplehash2, `1.0000 ${token_symbol}`, 1, 10, true, { from: oracle1 })
+    await teleporteos.received(oracle2.name, sender1.name, examplehash, `1.0000 ${token_symbol}`, 1, 10, true, { from: oracle2 })
+    let receipts = await teleporteos.receiptsTable({reverse: true})
+    chai.expect(receipts.rows[0].completed).equal(true, 'Teleport is not completed')
+    
   })
 })
 

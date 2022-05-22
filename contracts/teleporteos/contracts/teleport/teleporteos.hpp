@@ -185,7 +185,7 @@ public:
    * @param net_id Unique network id to distinguish different chains. See "ChainID" for ethereum based chains on https://chainlist.org/ 
    * @param teleaddr Teleport contract address
    * @param tokenaddr Token contract address
-   * @param receive_index Current index 
+   * @param completed_index Current index 
    */
   ACTION addchain(string name, string abbreviation, uint8_t chain_id, string net_id, string teleaddr, string tokenaddr, uint64_t completed_index);
   

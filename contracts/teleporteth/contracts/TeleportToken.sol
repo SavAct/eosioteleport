@@ -233,6 +233,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         c.contract_name = contract_name;
         c.chainId = chainId;
         chainNetId[chainId] = bytes4(netId);
+        require(indexes[chainId] <= telIndex, "Teleport index is already spent");
         indexes[chainId] = telIndex;
         c.active = true;
         return true;

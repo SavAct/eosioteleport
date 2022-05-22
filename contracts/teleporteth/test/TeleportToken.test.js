@@ -148,9 +148,12 @@ contract('TeleportToken', (accounts) => {
       assert.equal(chain.active, true, 'Added chain is not active')
     })
     it('should fail to add the same chain with different contract and different chain id', async () => {
-      await catchRevert(instance.addChain(addChain1NetId, addChain2Contract, 1, 0, {from: accounts[0]}), 'Add the same chain twice')
+      await catchRevert(instance.addChain(addChain1NetId, addChain2Contract, 1, 0, {from: accounts[0]}), 'Add the same chain net twice')
     })
-    it('should fail to add the another chain with same chain id', async () => {
+    it('should fail to add another chain with the chain id of this contract', async () => {
+      await catchRevert(instance.addChain(addChain2NetId, addChain2Contract, 2, 0, {from: accounts[0]}), 'Add a chain with the same id as this eth contract')
+    })
+    it('should fail to add another chain with same chain id', async () => {
       await catchRevert(instance.addChain(addChain2NetId, addChain2Contract, 0, 0, {from: accounts[0]}), 'Add the same chain id twice')
     })
     it('should succeed to add another chain', async () => {
@@ -163,12 +166,12 @@ contract('TeleportToken', (accounts) => {
   })
   describe("Remove chain", function () {
     it('should fail without authorization', async () => {
-      await catchRevert(instance.rmChain(addChain2NetId, {from: accounts[3]}), 'Unauthorized chain registration')
+      await catchRevert(instance.rmChain(addChain2NetId, {from: accounts[3]}), 'Unauthorized removing chain')
     })
-    it('should succeed to add a chain', async () => {
+    it('should succeed to remove a chain', async () => {
       await instance.rmChain(addChain2NetId, {from: accounts[0]})
-      let chain = await instance.chains(addChain1ShortNetId);
-      assert.equal(chain.active, true, 'Removed chain is still active')
+      let chain = await instance.chains(addChain2ShortNetId);
+      assert.equal(chain.active, false, 'Removed chain is still active')
     })
   })
   describe("Register oracles", function () {
@@ -286,8 +289,7 @@ contract('TeleportToken', (accounts) => {
       signaturesTry = signWithTesSettings(logDataHexTry)
       await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an unknown chain id')
     });
-    it('should succeed to claim a second teleport', async () => {
-      // Should succeed a second received teleport 
+    it('should succeed to claim a second teleport with already used chain', async () => {
       logDataTry.chain_id = TestSettings.chainId
       logDataHexTry = serializeEosioTeleport(logDataTry)
       signaturesTry = signWithTesSettings(logDataHexTry)
@@ -339,14 +341,16 @@ contract('TeleportToken', (accounts) => {
       await catchRevert(instance.transferFrom(accounts[1], accounts[5], 1, {from: accounts[3]}), 'Can not remove the right to transfer tokens')
     })
   })
+  let receiveChainId
+  let secondReceiveChainId
   describe("Teleport to eosio chain", function () {
     let sendAmount
     let sendAmount2
-    const receiveChainId = TestSettings.chainId + 1
-    const secondReceiveChainId = TestSettings.chainId + 2
     before("calc amounts for sending", async function () {
       sendAmount = tokenAmount1 / 2
       tokenAmount1 -= sendAmount
+      receiveChainId = TestSettings.chainId + 1
+      secondReceiveChainId = TestSettings.chainId + 2
     })
     it('should succeed a teleport', async () => {
       await instance.teleport('fraugertrud', sendAmount, receiveChainId, {from: accounts[1]});
@@ -364,6 +368,44 @@ contract('TeleportToken', (accounts) => {
       await instance.teleport('frauerdbeere', sendAmount2, receiveChainId, {from: accounts[1]});
       assert.equal(await instance.indexes(secondReceiveChainId), 1, `Wrong index fort teleports to chain ${secondReceiveChainId }`);
       assert.equal(await instance.indexes(receiveChainId), 3, `Wrong index fort teleports to chain ${receiveChainId }`);
+    })
+  })
+  describe("Check indexes by adding new chains", function () {
+    let sendAmount
+    let lastChainIndex, lastChain2Index
+    before("calc amounts for sending", async function () {
+      sendAmount = tokenAmount1 / 10
+      lastChainIndex = 3
+      lastChain2Index = 0
+    })
+    it('should succeed to remove the first chain', async () => {
+      await instance.rmChain(addChain1NetId, {from: accounts[0]})
+      assert.equal((await instance.chains(addChain1ShortNetId)).active, false, 'Removed first chain is still active')
+    })
+    it('should fail to add the first chain with first used zero index', async () => {
+      await catchRevert(instance.addChain(addChain1NetId, addChain1Contract, receiveChainId, 0, {from: accounts[0]}), "Can add chain with already used first index")
+    })
+    it('should fail to add the first chain with used last index', async () => {
+      await catchRevert(instance.addChain(addChain1NetId, addChain1Contract, receiveChainId, lastChainIndex - 1, {from: accounts[0]}), "Can add chain with already used last index")
+    })
+    it('should succeed to add the first chain with the destined next index', async () => {
+      await instance.addChain(addChain1NetId, addChain1Contract, receiveChainId, lastChainIndex, {from: accounts[0]})
+    })
+    it('should succeed a teleport from the first chain', async () => {
+      await instance.teleport('frauerdbeere', sendAmount, receiveChainId, {from: accounts[1]});
+      lastChainIndex++
+      assert.equal(await instance.indexes(receiveChainId), lastChainIndex, `Wrong index fort teleport to chain ${receiveChainId }`);
+      tokenAmount1 -= sendAmount
+    })
+    it('should succeed to add a second chain with a much higher index', async () => {
+      lastChain2Index = 10
+      await instance.addChain(addChain2NetId, addChain2Contract, secondReceiveChainId, lastChain2Index, {from: accounts[0]})
+    })
+    it('should succeed a teleport from the second chain', async () => {
+      await instance.teleport('frauerdbeere', sendAmount, secondReceiveChainId, {from: accounts[1]});
+      lastChain2Index++
+      assert.equal(await instance.indexes(secondReceiveChainId), lastChain2Index, `Wrong index fort teleport to chain ${secondReceiveChainId }`);
+      tokenAmount1 -= sendAmount
     })
   })
   describe("Check freeze", function () {
