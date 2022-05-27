@@ -1,4 +1,5 @@
 module.exports = {
+    version: 2,
     precision: 4,       // Token precision
     symbol: 'TLM',      // Token symbol
     confirmations: 3,   // Number of needed oracle confirmations per teleport
@@ -12,7 +13,7 @@ module.exports = {
             'http://jungle2.cryptolions.io:8888',
         ],
         epVerifications: 2,                 // Verify data by this number of endpoints
-        teleportContract: 'alein.worlds',   // EOSIO token contract account
+        teleportContract: 'savactbridge',   // EOSIO token contract account
         oracleAccount: 'oracle1',           // EOSIO oracle account
         privateKey: '5K29JmEvWEnfdD5DV1bm9Ro4qMrTKhBGmTXuaaqmrZSMEntqqZQ', // Example private EOSIO key. Do not use it. It is public!
         waitCycle: 165,                     // Seconds to wait to check for new teleports after all teleports are handled. EOSIO chains typically needs 165 seconds to set transactions as irreversible.

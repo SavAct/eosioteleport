@@ -94,7 +94,7 @@ function fromHexString(hexString){
   return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
 }
 
-function signWithTesSettings(logDataHex){
+function signWithTestSettings(logDataHex){
   const logDataBuffer = Buffer.from(logDataHex.substring(2), 'hex')
   const logDataKeccak = ethUtil.keccak(logDataBuffer)
   let signatures = []
@@ -226,7 +226,7 @@ contract('TeleportToken', (accounts) => {
         eth_address: accounts[1].substring(2) + '000000000000000000000000', // address
       }
       logDataHex = serializeEosioTeleport(logData)
-      signatures = signWithTesSettings(logDataHex)
+      signatures = signWithTestSettings(logDataHex)
       // Create example log data of invalid chain
       logAsset = `${fullToken1}.${'0'.repeat(TestSettings.Token.decimals)} ${TestSettings.Token.symbol}`
       logData2 = {
@@ -240,7 +240,7 @@ contract('TeleportToken', (accounts) => {
         eth_address: accounts[1].substring(2) + '000000000000000000000000', // address
       }
       logDataHex2 = serializeEosioTeleport(logData2)
-      signatures2 = signWithTesSettings(logDataHex2)
+      signatures2 = signWithTestSettings(logDataHex2)
       // Create claim data with same id as before
       logDataTry = {
         id: 0,                                                              // uint64
@@ -253,7 +253,7 @@ contract('TeleportToken', (accounts) => {
         eth_address: accounts[7].substring(2) + '000000000000000000000000', // address
       }
       logDataHexTry = serializeEosioTeleport(logDataTry)
-      signaturesTry = signWithTesSettings(logDataHexTry)
+      signaturesTry = signWithTestSettings(logDataHexTry)
     })
     it('should have zero ballances at the beginning', async () => {
       assert.equal(await instance.balanceOf.call(accounts[0]).valueOf(), 0, 'Balance of account 0 is not 0')
@@ -286,13 +286,13 @@ contract('TeleportToken', (accounts) => {
       logDataTry.id = 1
       logDataTry.chain_id = TestSettings.chainId + 1
       logDataHexTry = serializeEosioTeleport(logDataTry)
-      signaturesTry = signWithTesSettings(logDataHexTry)
+      signaturesTry = signWithTestSettings(logDataHexTry)
       await catchRevert(instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]}), 'It is possible to claim a teleport with an unknown chain id')
     });
     it('should succeed to claim a second teleport with already used chain', async () => {
       logDataTry.chain_id = TestSettings.chainId
       logDataHexTry = serializeEosioTeleport(logDataTry)
-      signaturesTry = signWithTesSettings(logDataHexTry)
+      signaturesTry = signWithTestSettings(logDataHexTry)
       instance.claim(logDataHexTry, signaturesTry, {from: accounts[2]})
     });
   });
@@ -421,7 +421,7 @@ contract('TeleportToken', (accounts) => {
       eosio_id: TestSettings.EOSIO.netId,
     }
     const logDataHex = serializeEosioTeleport(logDataTry)
-    let signatures = signWithTesSettings(logDataHex)
+    let signatures = signWithTestSettings(logDataHex)
     
     let sendAmount
     before("calc amount for sending", async function () {

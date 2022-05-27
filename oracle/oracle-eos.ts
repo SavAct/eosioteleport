@@ -5,7 +5,7 @@ import { TextDecoder, TextEncoder } from "text-encoding"
 import { ecsign, keccak, toRpcSig } from "ethereumjs-util"
 import { EosApi } from './EndpointSwitcher'
 import { ConfigType, TeleportTableEntry } from './CommonTypes'
-import yargs from 'yargs'
+import yargs, { number, string } from 'yargs'
 
 /**
  * Convert an Uint8Array to an hex in string format
@@ -52,15 +52,23 @@ const sleep = async (ms: number) => {
 //     }
 //     return true
 //   }
+interface EOSIO_Chain_Data {
+    tel_contract: string
+    short_net_id: Uint8Array
+}
 
-class EosOracle{
+class EosOracle {
+
     private eos_api: EosApi
+    private eosio_data : EOSIO_Chain_Data
     public running = false
     private irreversible_time = 0
     static maxWait = 180    // The max amount of seconds to wait to check an entry again if it is irreversible now
 
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider){
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
+        this.eosio_data = {tel_contract: config.eos.teleportContract, short_net_id: fromHexString(config.eos.netId.substring(0, 8))}
+
     }
 
     /**
@@ -159,7 +167,7 @@ class EosOracle{
      * @param logSize Trim the serialized data to this size
      * @returns Serialized data as Uint8Array
      */
-    static serializeLogData(teleport: {id: number, time: number, account: string, quantity: string, chain_id: number, eth_address: string}, logSize: number){
+    static serializeLogData_v1(teleport: {id: number, time: number, account: string, quantity: string, chain_id: number, eth_address: string}, logSize: number){
         // Serialize the values
         const sb = new Serialize.SerialBuffer({
             textEncoder: new TextEncoder,
@@ -174,6 +182,29 @@ class EosOracle{
         return sb.array.slice(0, logSize)
     }
     
+    /**
+     * Serialize the table entry of a teleport 
+     * @param teleport Parameters of a teleport table entry  
+     * @param logSize Trim the serialized data to this size
+     * @returns Serialized data as Uint8Array
+     */
+    static serializeLogData_v2(eosio_chain_data : EOSIO_Chain_Data, teleport: {id: number, time: number, account: string, quantity: string, chain_id: number, eth_address: string}, logSize: number){
+        // Serialize the values
+        const sb = new Serialize.SerialBuffer({
+            textEncoder: new TextEncoder,
+            textDecoder: new TextDecoder
+        })
+        sb.pushNumberAsUint64(teleport.id)
+        sb.pushUint32(teleport.time)
+        sb.pushName(teleport.account)
+        sb.pushAsset(teleport.quantity)
+        sb.push(teleport.chain_id)
+        sb.pushName(eosio_chain_data.tel_contract)
+        sb.pushUint8ArrayChecked(eosio_chain_data.short_net_id, 4)
+        sb.pushArray(fromHexString(teleport.eth_address))
+        return sb.array.slice(0, logSize)
+    }
+
     /**
      * Get signature for teleport data
      * @param logData Serialized teleport table entry
@@ -317,17 +348,25 @@ class EosOracle{
             }
             
             // Serialize the teleport table entry
-            const logData = EosOracle.serializeLogData(item, 69)
-            const logDataHex = toHexString(logData)
-            
+            let logData : Uint8Array
+            let verifyLogData = EosOracle.serializeLogData_v1(item, 69)
+            const verifyLogDataHex = toHexString(verifyLogData)
+
             // Verify serialization
             let isVerifyed = true
             for(let i = 0; i < this.config.eos.epVerifications - 1; i++){ 
-                if(logDataHex != verify_data[i][rowIndex].slice(0, logData.length * 2)){
+                if(verifyLogDataHex != verify_data[i][rowIndex].slice(0, verifyLogData.length * 2)){
                     console.error(`Verification failed by ${this.eos_api.getEndpoint()}. ⚠️`)
                     isVerifyed = false
                 }
                 // console.log(`Teleport id ${item.id}, verified ${i + 1} times`)
+            }
+
+            // Get serialized data for signing
+            if(typeof this.config.version != 'number' || this.config.version < 2){
+                logData = verifyLogData
+            } else {
+                logData = EosOracle.serializeLogData_v2(this.eosio_data, item, 81)
             }
 
             // Check time

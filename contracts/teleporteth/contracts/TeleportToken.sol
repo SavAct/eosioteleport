@@ -194,6 +194,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     bool public freezedTeleport;
     bool public freezedClaim;
     uint public _totalSupply;
+    uint public minteleport;
     
     mapping(address => uint) balances;
     mapping(address => mapping(address => uint)) allowed;
@@ -218,6 +219,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         _totalSupply = 10000000000 * (10**uint(decimals));  // Total supply of the EOSIO token
         threshold = 3;
         thisChainId = 2;
+        minteleport = 0;
 
         balances[address(0)] = _totalSupply;
         _revSymbolRaw = Endian.reverse64(string_to_symbol_c(decimals, symbol));
@@ -245,6 +247,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         c.active = false;
         return true;
     }
+    
     // ------------------------------------------------------------------------
     // Total supply
     // ------------------------------------------------------------------------
@@ -339,7 +342,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // chainId : The chain id that they will be sent to
     // ------------------------------------------------------------------------
     function teleport(string memory to, uint tokens, uint8 chainid) public returns (bool success) {
-        if(freezedTeleport){
+        if(freezedTeleport || minteleport > tokens){
             revert();
         }
 
@@ -372,11 +375,11 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         assembly {
             id := mload(add(add(sigData, 0x8), 0))
             ts := mload(add(add(sigData, 0x4), 8))
-            fromAddr := mload(add(add(sigData, 0x8), 12))       // not used
+            fromAddr := mload(add(add(sigData, 0x8), 12))
             quantity := mload(add(add(sigData, 0x8), 20))
             symbolRaw := mload(add(add(sigData, 0x8), 28))
             chainId := mload(add(add(sigData, 0x1), 36))
-            fromContract := mload(add(add(sigData, 0x8), 37))   // not used
+            fromContract := mload(add(add(sigData, 0x8), 37))
             fromChain := mload(add(add(sigData, 0x4), 45))      
             toAddress := mload(add(add(sigData, 0x14), 49))
         }
@@ -386,12 +389,6 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         td.quantity = Endian.reverse64(quantity);
         td.toAddress = toAddress;
         td.fromChain = bytes4(fromChain);
-
-        // Some not used parameters in origin TeleportData
-        // td.fromAddr = Endian.reverse64(fromAddr);
-        // td.symbolRaw = Endian.reverse64(symbolRaw);  
-        // td.chainId = chainId;                        
-        // td.fromContract = Endian.reverse64(fromContract);
 
         require(thisChainId == chainId, "Invalid chain id");
         require(block.timestamp < td.ts + (60 * 60 * 24 * 30), "Teleport has expired");
@@ -491,6 +488,11 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         }
 
         return false;
+    }
+
+    function setMin(uint min) public onlyOwner returns (bool success) {
+        minteleport = min;
+        return true;
     }
 
     // ------------------------------------------------------------------------

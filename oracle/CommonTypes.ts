@@ -1,11 +1,10 @@
 export interface ConfigType {
-    precision: number
-    symbol: string
-    // network: string
-    confirmations: number
+    version: number,
+    precision: number,
+    symbol: string,
+    confirmations: number,
     eos: {
         network: string,
-        // wsEndpoint: string,
         netId: string,
         id?: number,
         endpoint?: string,
@@ -13,14 +12,12 @@ export interface ConfigType {
         teleportContract: string,
         oracleAccount: string,
         privateKey: string,
-        // genesisBlock: number,
         oraclePermission?: string,
         epVerifications: number,
         waitCycle: number,
     }
     eth: {
         network: string,
-        // wsEndpoint: string,
         netId?: string,
         id?: bigint | number | string,
         endpoint?: string,
@@ -47,18 +44,24 @@ export interface TeleportTableEntry{
     claimed: boolean
 }
 
+// V1 == V2: ACTION sign(name oracle_name, uint64_t id, string signature);
+
+// V1 == V2: ACTION claimed(name oracle_name, uint64_t id, checksum256 to_eth, asset quantity);
 export interface eosio_claim_data {
     oracle_name: string;
     id: number;
     to_eth: string;
     quantity: string;
 }
-  
+
+// v1: ACTION received(name oracle_name, name to, checksum256 ref, asset quantity, uint8_t chain_id, bool confirmed);
+// v2: ACTION received(name oracle_name, name to, checksum256 ref, asset quantity, uint8_t chain_id, uint64_t index, bool confirmed);
 export interface eosio_teleport_data {
     oracle_name: string;
     to: string;
     ref: string;
     quantity: string;
     chain_id: number;
+    index?: bigint;
     confirmed: boolean;
 }

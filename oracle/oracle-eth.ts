@@ -8,7 +8,7 @@ When an event is received, it will call the `received` action on the EOS chain
 
 import fs from 'fs'
 import { ethers } from 'ethers'
-import yargs, { number } from 'yargs'
+import yargs from 'yargs'
 import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes'
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { EosApi, EthApi } from './EndpointSwitcher'
@@ -20,16 +20,54 @@ type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: str
  * Use this function with await to let the thread sleep for the defined amount of time
  * @param ms Milliseconds
  */
- const sleep = async (ms: number) => {
+const sleep = async (ms: number) => {
     return new Promise((resolve) => {
         setTimeout(resolve, ms)
     })
 }
 
+function amountToAsset(amount: bigint, symbol_name: string, precision: number){
+    let s = amount.toString().padStart(precision, '0')
+    let p = s.length - precision
+    let int = s.substring(0, p)
+    return `${int? int : '0'}${'.'}${s.substring(p)} ${symbol_name}` 
+}
+
+interface LogEvent {
+    decode: Array<string>,
+    topic: string,
+}
+
 class EthOracle {
+    static version_v1: {
+        claimed : {
+            // Claimed(uint64,address,uint256)
+            decode: ['uint64','address','uint256']
+            topic: '0xf20fc6923b8057dd0c3b606483fcaa038229bb36ebc35a0040e3eaa39cf97b17',
+        }
+        teleport : {
+            // Teleport(address,string,uint256,uint256)
+            decode: ['address','string','uint256','uint256']
+            topic: '0x622824274e0937ee319b036740cd0887131781bc2032b47eac3e88a1be17f5d5',
+        }
+    }
+    static version_v2: {
+        claimed : {
+            // Claimed(uint8,uint64,address,uint256)
+            decode: ['uint8','uint64','address','uint256']
+            topic: '0xa18184d14611af592f0e7a756bf8433f27f0b73ab0199ee0a4d3d865c4585bcf',
+        }
+        teleport : {
+            // Teleport(address,string,uint256,uint8,uint64)
+            decode: ['address','string','uint256','uint8','uint64']
+            topic: '0x4431c332d53bf40750f07d7a09805bc077fb535bc028e78a60dcc8a43bf25e7e',
+        }
+    }
+    
+    private version : number
+    private claimed_logEvent : LogEvent
+    private teleport_logEvent : LogEvent
     public running = false
-    private claimed_topic = '0xf20fc6923b8057dd0c3b606483fcaa038229bb36ebc35a0040e3eaa39cf97b17'
-    private teleport_topic = '0x622824274e0937ee319b036740cd0887131781bc2032b47eac3e88a1be17f5d5'
     static MIN_BLOCKS_TO_WAIT = 5
     private blocksToWait : number
     private blocks_file_name : string
@@ -43,6 +81,19 @@ class EthOracle {
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.eth_api = new EthApi(this.config.eth.netId, this.config.eth.endpoints)
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
+
+        this.version = 0
+        switch(this.config.version){
+            case 2: this.version = 2
+                this.claimed_logEvent = EthOracle.version_v2.claimed
+                this.teleport_logEvent = EthOracle.version_v2.teleport
+                break;
+            case 1: this.version = 1
+            case 0:
+            default:
+                this.claimed_logEvent = EthOracle.version_v1.claimed
+                this.teleport_logEvent = EthOracle.version_v1.teleport
+        }
     }
 
     /**
@@ -54,8 +105,9 @@ class EthOracle {
     static extractEthClaimedData (data: ethers.utils.Result, config: EthDataConfig): eosio_claim_data {
         const id = data[0].toNumber()
         const to_eth = data[1].replace('0x', '') + '000000000000000000000000'
-        const quantity = (data[2].toNumber() / Math.pow(10, config.precision)).toFixed(config.precision) + ' ' + config.symbol
-        return { oracle_name: config.eos.oracleAccount, id, to_eth, quantity, }
+        const amount = BigInt(data[2].toString())
+        const quantity = amountToAsset(amount, config.symbol, config.precision)
+        return { oracle_name: config.eos.oracleAccount, id, to_eth, quantity }
     }
     
     /**
@@ -64,20 +116,25 @@ class EthOracle {
      * @param config Contains information of precision and symbol of the token as well as the oracle name of this contract 
      * @returns 
      */
-    static extractEthTeleportData(data: ethers.utils.Result, transactionHash: string, config: EthDataConfig): eosio_teleport_data {
-        const tokens = data[1].toNumber() as number
-        if (tokens <= 0) {
+    static extractEthTeleportData(version: number, data: ethers.utils.Result, transactionHash: string, config: EthDataConfig): eosio_teleport_data {
+        const to = data[0]
+        
+        const amount = BigInt(data[1].toString())
+        if (amount == BigInt(0)) {
             throw new Error('Tokens are less than or equal to 0')
         }
-        const to = data[0]
-        const chain_id = data[2].toNumber() as number
-        const amount = (tokens / Math.pow(10, config.precision)).toFixed(
-            config.precision
-        )
-        const quantity = `${amount} ${config.symbol}`
+        const quantity = amountToAsset(amount, config.symbol, config.precision)
+        
         const txid = transactionHash.replace(/^0x/, '')
-      
-        return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, ref: txid }
+
+        if(version >= 2){
+            let index = BigInt(data[2].toString())
+            let chain_id = data[3].toNumber() as number
+            return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, index, ref: txid }
+        } else {
+            let chain_id = data[2].toNumber() as number
+            return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, ref: txid }
+        }      
     }
 
     /**
@@ -157,14 +214,14 @@ class EthOracle {
             fromBlock: from_block,
             toBlock: to_block,
             address: this.config.eth.teleportContract,
-            topics: [this.claimed_topic],
+            topics: [this.claimed_logEvent.topic],
         }
         const res = await this.eth_api.getProvider().getLogs(query)
 
         // Mark each claimed event on eosio chain as claimed
         for await (const entry of res) {
             // Extract data from eth claimed event
-            const decodedData = ethers.utils.defaultAbiCoder.decode(['uint64', 'address', 'uint'], entry.data)
+            const decodedData = ethers.utils.defaultAbiCoder.decode(this.claimed_logEvent.decode, entry.data)
             const eosioData = EthOracle.extractEthClaimedData(decodedData, this.config)
 
             // Wait for confirmation of each transaction before continuing
@@ -255,15 +312,15 @@ class EthOracle {
           fromBlock: from_block,
           toBlock: to_block,
           address: this.config.eth.teleportContract,
-          topics: [this.teleport_topic],
+          topics: [this.teleport_logEvent.topic],
         }
         const res = await this.eth_api.getProvider().getLogs(query)
       
         // Confirm each teleport event on eosio chain
         for await (const entry of res) {
             // Extract data from teleport eth event
-            const decodedData = ethers.utils.defaultAbiCoder.decode(['string', 'uint', 'uint'], entry.data)
-            const eosioData = EthOracle.extractEthTeleportData(decodedData, entry.transactionHash, this.config)
+            const decodedData = ethers.utils.defaultAbiCoder.decode(this.teleport_logEvent.decode, entry.data)
+            const eosioData = EthOracle.extractEthTeleportData(this.version, decodedData, entry.transactionHash, this.config)
           
             // Check id is equal to recipient chain
             if(this.config.eos.id !== undefined && eosioData.chain_id !== Number(this.config.eos.id)){
@@ -284,7 +341,7 @@ class EthOracle {
             }
 
             // Set the id as the id of the sender chain
-            if(this.config.eth.id !== undefined){
+            if(this.version == 0 && this.config.eth.id !== undefined){
                 eosioData.chain_id = Number(this.config.eth.id)
             }
 
