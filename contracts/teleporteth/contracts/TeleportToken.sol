@@ -173,7 +173,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         // uint8 chainId;       // does not need to be send
         address toAddress;
         // uint64 fromContract; // does not need to be send
-        bytes4 fromChain;
+        bytes4 fromChainNet;
         uint8 fromChainId;
     }
 
@@ -199,15 +199,15 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     mapping(address => uint) balances;
     mapping(address => mapping(address => uint)) allowed;
 
-    mapping(uint64 => mapping(address => bool)) signed;
-    mapping(bytes32 => mapping(uint64 => bool)) public claimed;
+    mapping(bytes32 => mapping(uint64 => mapping(address => bool))) signed;
+    mapping(bytes32 => mapping(uint64 => bool)) claimed;
 
     mapping(uint8 => uint64) public indexes;
     mapping(bytes32 => Chain) public chains;
     mapping(uint8 => bytes32) private chainNetId;
 
     event Teleport(address indexed from, string to, uint tokens, uint8 chainId, uint64 index);
-    event Claimed(uint8 fromChainId, uint64 id, address to, uint tokens);
+    event Claimed(bytes32 chainNet, uint8 chainId, uint64 id, address to, uint tokens);
 
     // ------------------------------------------------------------------------
     // Constructor
@@ -263,6 +263,13 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         return balances[tokenOwner];
     }
 
+
+    // ------------------------------------------------------------------------
+    // Get the claimed status of a teleport
+    // ------------------------------------------------------------------------
+    function getClaimed(uint8 chainId, uint64 index) public view returns (bool) {
+        return claimed[chainNetId[chainId]][index];
+    }
 
     // ------------------------------------------------------------------------
     // Transfer the balance from token owner's account to `to` account
@@ -369,7 +376,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         uint64 symbolRaw;
         uint8 chainId;
         uint64 fromContract;
-        uint32 fromChain;
+        uint32 fromChainNet;
         address toAddress;
 
         assembly {
@@ -380,7 +387,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
             symbolRaw := mload(add(add(sigData, 0x8), 28))
             chainId := mload(add(add(sigData, 0x1), 36))
             fromContract := mload(add(add(sigData, 0x8), 37))
-            fromChain := mload(add(add(sigData, 0x4), 45))      
+            fromChainNet := mload(add(add(sigData, 0x4), 45))      
             toAddress := mload(add(add(sigData, 0x14), 49))
         }
 
@@ -388,20 +395,20 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         td.ts = Endian.reverse32(ts);
         td.quantity = Endian.reverse64(quantity);
         td.toAddress = toAddress;
-        td.fromChain = bytes4(fromChain);
+        td.fromChainNet = bytes4(fromChainNet);
 
         require(thisChainId == chainId, "Invalid chain id");
         require(block.timestamp < td.ts + (60 * 60 * 24 * 30), "Teleport has expired");
         require(symbolRaw == _revSymbolRaw, "Invalid token");
         
-        Chain storage c = chains[td.fromChain];
+        Chain storage c = chains[td.fromChainNet];
         require(c.active, "Invalid sender net id");
-        require(c.contract_name == fromContract,"Invalid sender contract name");
+        require(c.contract_name == fromContract, "Invalid sender contract name");
 
-        require(!claimed[td.fromChain][td.id], "Already Claimed");
+        require(!claimed[td.fromChainNet][td.id], "Already Claimed");
 
         td.fromChainId = c.chainId;
-        claimed[td.fromChain][td.id] = true;
+        claimed[td.fromChainNet][td.id] = true;
 
         return td;
     }
@@ -443,8 +450,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
             address potential = Verify.recoverSigner(message, signatures[i]);
 
             // Check that they are oracles which are registered and haven't signed twice
-            if (oracles[potential] && !signed[td.id][potential]){
-                signed[td.id][potential] = true;
+            if (oracles[potential] && !signed[td.fromChainNet][td.id][potential]){
+                signed[td.fromChainNet][td.id][potential] = true;
                 numberSigs++;
             }
         }
@@ -454,7 +461,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         balances[address(0)] = balances[address(0)] - td.quantity;
         balances[td.toAddress] = balances[td.toAddress] + td.quantity;
         emit Transfer(address(0), td.toAddress, td.quantity);
-        emit Claimed(td.fromChainId, td.id, td.toAddress, td.quantity);
+        emit Claimed(td.fromChainNet, td.fromChainId, td.id, td.toAddress, td.quantity);
 
         return td.toAddress;
     }

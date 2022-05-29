@@ -73,21 +73,6 @@ var sleep = function (ms) { return __awaiter(void 0, void 0, void 0, function ()
             })];
     });
 }); };
-// /**
-//  * Check if two Uint8Arrays are equal
-//  * @param a Frist array
-//  * @param b Seconf array
-//  * @returns True or false
-//  */
-// function arraysEqual(a: Uint8Array, b: Uint8Array) {
-//     if (a === b) return true
-//     if (a == null || b == null) return false
-//     if (a.length !== b.length) return false
-//     for (var i = 0; i < a.length; ++i) {
-//       if (a[i] !== b[i]) return false
-//     }
-//     return true
-//   }
 var EosOracle = /** @class */ (function () {
     function EosOracle(config, signatureProvider) {
         this.config = config;
@@ -95,6 +80,7 @@ var EosOracle = /** @class */ (function () {
         this.running = false;
         this.irreversible_time = 0;
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
+        this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: fromHexString(config.eos.netId.substring(0, 8)) };
     }
     /**
      * Send sign a teleport. Repeats itself until a defined amount of tries are reached
@@ -231,7 +217,7 @@ var EosOracle = /** @class */ (function () {
      * @param logSize Trim the serialized data to this size
      * @returns Serialized data as Uint8Array
      */
-    EosOracle.serializeLogData = function (teleport, logSize) {
+    EosOracle.serializeLogData_v1 = function (teleport, logSize) {
         // Serialize the values
         var sb = new eosjs_1.Serialize.SerialBuffer({
             textEncoder: new text_encoding_1.TextEncoder,
@@ -242,6 +228,28 @@ var EosOracle = /** @class */ (function () {
         sb.pushName(teleport.account);
         sb.pushAsset(teleport.quantity);
         sb.push(teleport.chain_id);
+        sb.pushArray(fromHexString(teleport.eth_address));
+        return sb.array.slice(0, logSize);
+    };
+    /**
+     * Serialize the table entry of a teleport
+     * @param teleport Parameters of a teleport table entry
+     * @param logSize Trim the serialized data to this size
+     * @returns Serialized data as Uint8Array
+     */
+    EosOracle.serializeLogData_v2 = function (eosio_chain_data, teleport, logSize) {
+        // Serialize the values
+        var sb = new eosjs_1.Serialize.SerialBuffer({
+            textEncoder: new text_encoding_1.TextEncoder,
+            textDecoder: new text_encoding_1.TextDecoder
+        });
+        sb.pushNumberAsUint64(teleport.id);
+        sb.pushUint32(teleport.time);
+        sb.pushName(teleport.account);
+        sb.pushAsset(teleport.quantity);
+        sb.push(teleport.chain_id);
+        sb.pushName(eosio_chain_data.tel_contract);
+        sb.pushUint8ArrayChecked(eosio_chain_data.short_net_id, 4);
         sb.pushArray(fromHexString(teleport.eth_address));
         return sb.array.slice(0, logSize);
     };
@@ -385,7 +393,7 @@ var EosOracle = /** @class */ (function () {
      */
     EosOracle.prototype.signAllTeleportsUntilNow = function (signProcessData) {
         return __awaiter(this, void 0, void 0, function () {
-            var waitForIrr, lastHandledId, _a, chain_data, verify_data, lowest_amount, rowIndex, item, logData, logDataHex, isVerifyed, i, signature;
+            var waitForIrr, lastHandledId, _a, chain_data, verify_data, lowest_amount, rowIndex, item, logData, verifyLogData, verifyLogDataHex, isVerifyed, i, signature;
             var _this = this;
             return __generator(this, function (_b) {
                 switch (_b.label) {
@@ -418,15 +426,23 @@ var EosOracle = /** @class */ (function () {
                             lastHandledId = item.id + 1;
                             return [3 /*break*/, 7];
                         }
-                        logData = EosOracle.serializeLogData(item, 69);
-                        logDataHex = toHexString(logData);
+                        logData = void 0;
+                        verifyLogData = EosOracle.serializeLogData_v1(item, 69);
+                        verifyLogDataHex = toHexString(verifyLogData);
                         isVerifyed = true;
                         for (i = 0; i < this.config.eos.epVerifications - 1; i++) {
-                            if (logDataHex != verify_data[i][rowIndex].slice(0, logData.length * 2)) {
+                            if (verifyLogDataHex != verify_data[i][rowIndex].slice(0, verifyLogData.length * 2)) {
                                 console.error("Verification failed by ".concat(this.eos_api.getEndpoint(), ". \u26A0\uFE0F"));
                                 isVerifyed = false;
                             }
                             // console.log(`Teleport id ${item.id}, verified ${i + 1} times`)
+                        }
+                        // Get serialized data for signing
+                        if (typeof this.config.version != 'number' || this.config.version < 2) {
+                            logData = verifyLogData;
+                        }
+                        else {
+                            logData = EosOracle.serializeLogData_v2(this.eosio_data, item, 81);
                         }
                         // Check time
                         if (item.time > this.irreversible_time) {

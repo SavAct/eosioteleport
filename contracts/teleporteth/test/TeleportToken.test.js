@@ -455,6 +455,29 @@ contract('TeleportToken', (accounts) => {
       await instance.freeze(false, false, false, {from: accounts[0]});
     })
   })
+  describe("Set minimum teleport amount", function () {
+    let minAmount, receiveChainId, secondReceiveChainId
+    before("calc amounts for sending", async function () {
+      minAmount = 100
+      tokenAmount1 -= minAmount
+      receiveChainId = TestSettings.chainId + 1
+      secondReceiveChainId = TestSettings.chainId + 2
+    })
+    it('should fail with unaothorized account', async () => {
+      await catchRevert(instance.setMin(minAmount, {from: accounts[3]}), "Unauthorized set min")
+    })
+    it('should succeed to set min', async () => {
+      await instance.setMin(minAmount, {from: accounts[0]})
+      assert.equal((await instance.minteleport.call()).valueOf(), minAmount, 'Minimum teleport amount was not setted correctly')
+    })
+    it('should fail a teleport with lower amount than min amount', async () => {
+      await catchRevert(instance.teleport('fraugertrud', 10, receiveChainId, {from: accounts[1]}), "Transaction with less amount than min amount");
+    })
+    it('should succeed a teleport with min amount', async () => {
+      await instance.teleport('fraugertrud', minAmount, receiveChainId, {from: accounts[1]});
+      assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), BigInt(tokenAmount1), 'Balance of account got not reduced')
+    })
+  })
   describe("Transfer ownership", function () {
     let owner;
     let newOwner;

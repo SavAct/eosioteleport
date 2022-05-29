@@ -49,7 +49,7 @@ export interface TeleportTableEntry{
 // V1 == V2: ACTION claimed(name oracle_name, uint64_t id, checksum256 to_eth, asset quantity);
 export interface eosio_claim_data {
     oracle_name: string;
-    id: number;
+    id: bigint;
     to_eth: string;
     quantity: string;
 }

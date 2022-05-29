@@ -25,14 +25,15 @@ ACTION ini(asset min, uint64_t fixfee, double varfee, bool freeze, uint32_t thre
 
 3. Add the allowed ethereum chains 
 ```
-  ACTION addchain(string name, uint8_t chain_id, string teleaddr, string tokenaddr);
+  ACTION addchain(string name, uint8_t chain_id, string teleaddr, string tokenaddr, uint64_t completed_index);
 ```
 - ***name*** Name of the chain to bridge
-- ***abbreviation*** Short name of the chain
-- ***chain_id*** Identification number for this new chain
+- ***abbreviation*** Short name of the chain (like ETH or BSC)
+- ***chain_id*** Identification number for this new chain (have to match the self given chain id of that contract)
 - ***net_id*** Unique network id to distinguish different chains. See "ChainID" for ethereum based chains on https://chainlist.org/ 
 - ***teleaddr*** Teleport contract address
-- ***tokenaddr*** Token contract address
+- ***tokenaddr*** Token contract address (may be the same as ***teleaddr***)
+ * ***completed_index*** Current index of received teleports from this chain (Should be zero if there are no transactions on that contract to this contract account)
 
 With the freeze action you can freeze and unfreeze specific parts of the contract
 ```

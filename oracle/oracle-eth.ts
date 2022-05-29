@@ -14,7 +14,7 @@ import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { EosApi, EthApi } from './EndpointSwitcher'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 
-type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string}}
+type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string, id?: number, netId: string}}
 
 /**
  * Use this function with await to let the thread sleep for the defined amount of time
@@ -39,27 +39,27 @@ interface LogEvent {
 }
 
 class EthOracle {
-    static version_v1: {
+    static version_v1 = {
         claimed : {
             // Claimed(uint64,address,uint256)
-            decode: ['uint64','address','uint256']
+            decode: ['uint64','address','uint256'],
             topic: '0xf20fc6923b8057dd0c3b606483fcaa038229bb36ebc35a0040e3eaa39cf97b17',
-        }
+        },
         teleport : {
             // Teleport(address,string,uint256,uint256)
-            decode: ['address','string','uint256','uint256']
+            decode: ['address','string','uint256','uint256'],
             topic: '0x622824274e0937ee319b036740cd0887131781bc2032b47eac3e88a1be17f5d5',
         }
     }
-    static version_v2: {
+    static version_v2 = {
         claimed : {
-            // Claimed(uint8,uint64,address,uint256)
-            decode: ['uint8','uint64','address','uint256']
-            topic: '0xa18184d14611af592f0e7a756bf8433f27f0b73ab0199ee0a4d3d865c4585bcf',
-        }
+            // Claimed(uint64,uint8,uint64,address,uint256)
+            decode: ['uint64','uint8','uint64','address','uint256'],
+            topic: '0x4204a123779e33b975c4a5937a9a5a0d9274dcb3e9fa1caecb418d43e395bbf2',
+        },
         teleport : {
             // Teleport(address,string,uint256,uint8,uint64)
-            decode: ['address','string','uint256','uint8','uint64']
+            decode: ['address','string','uint256','uint8','uint64'],
             topic: '0x4431c332d53bf40750f07d7a09805bc077fb535bc028e78a60dcc8a43bf25e7e',
         }
     }
@@ -102,12 +102,31 @@ class EthOracle {
      * @param config Contains information of precision and symbol of the token as well as the oracle name of this contract 
      * @returns 
      */
-    static extractEthClaimedData (data: ethers.utils.Result, config: EthDataConfig): eosio_claim_data {
-        const id = data[0].toNumber()
-        const to_eth = data[1].replace('0x', '') + '000000000000000000000000'
-        const amount = BigInt(data[2].toString())
-        const quantity = amountToAsset(amount, config.symbol, config.precision)
-        return { oracle_name: config.eos.oracleAccount, id, to_eth, quantity }
+    static extractEthClaimedData (version: number, data: ethers.utils.Result, config: EthDataConfig): eosio_claim_data | false {
+        if(version >= 2){
+            const chainNet = data[0].toString();
+            const chainId = data[1].toNumber();
+            if(config.eos.id == undefined || config.eos.id != chainId){
+                console.log('Found teleport with other chain id');
+                return false
+            }
+            if(config.eos.netId.substring(chainNet.length) != chainNet){
+                console.log('Found teleport with other net id');
+                return false
+            }
+
+            const id = BigInt(data[2].toString())
+            const to_eth = data[3].replace('0x', '') + '000000000000000000000000'
+            const amount = BigInt(data[4].toString())
+            const quantity = amountToAsset(amount, config.symbol, config.precision)
+            return {oracle_name: config.eos.oracleAccount, id, to_eth, quantity }
+        } else {
+            const id = BigInt(data[0].toString())
+            const to_eth = data[1].replace('0x', '') + '000000000000000000000000'
+            const amount = BigInt(data[2].toString())
+            const quantity = amountToAsset(amount, config.symbol, config.precision)
+            return { oracle_name: config.eos.oracleAccount, id, to_eth, quantity }
+        }
     }
     
     /**
@@ -222,7 +241,13 @@ class EthOracle {
         for await (const entry of res) {
             // Extract data from eth claimed event
             const decodedData = ethers.utils.defaultAbiCoder.decode(this.claimed_logEvent.decode, entry.data)
-            const eosioData = EthOracle.extractEthClaimedData(decodedData, this.config)
+            const eosioData = EthOracle.extractEthClaimedData(this.version, decodedData, this.config)
+
+            // When teleport does not refer to this eosio chain
+            if(eosioData === false){
+                console.log('Continue');
+                continue
+            }
 
             // Wait for confirmation of each transaction before continuing
             if(!await this.await_confirmation(entry)){
@@ -564,7 +589,11 @@ if(typeof argv.block == 'number' || argv.block == 'latest') {
     startRef = start_block_env
 }
 if(configFile.eos.epVerifications > configFile.eos.endpoints.length){
-    console.error('Error: epVerifications cannot be greater than given amount of endpoints')
+    console.error('Error: eosio epVerifications cannot be greater than given amount of endpoints')
+    process.exit(1)
+}
+if(configFile.eth.epVerifications > configFile.eth.endpoints.length){
+    console.error('Error: eosio epVerifications cannot be greater than given amount of endpoints')
     process.exit(1)
 }
 let waitCycle : undefined | number = undefined

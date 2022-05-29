@@ -68,19 +68,36 @@ var sleep = function (ms) { return __awaiter(void 0, void 0, void 0, function ()
             })];
     });
 }); };
+function amountToAsset(amount, symbol_name, precision) {
+    var s = amount.toString().padStart(precision, '0');
+    var p = s.length - precision;
+    var int = s.substring(0, p);
+    return "".concat(int ? int : '0').concat('.').concat(s.substring(p), " ").concat(symbol_name);
+}
 var EthOracle = /** @class */ (function () {
     function EthOracle(config, signatureProvider) {
         this.config = config;
         this.signatureProvider = signatureProvider;
         this.running = false;
-        this.claimed_topic = '0xf20fc6923b8057dd0c3b606483fcaa038229bb36ebc35a0040e3eaa39cf97b17';
-        this.teleport_topic = '0x622824274e0937ee319b036740cd0887131781bc2032b47eac3e88a1be17f5d5';
         this.minTrySend = 3;
         this.blocksToWait = typeof config.eth.blocksToWait == 'number' && config.eth.blocksToWait > EthOracle.MIN_BLOCKS_TO_WAIT ? config.eth.blocksToWait : EthOracle.MIN_BLOCKS_TO_WAIT;
         this.blocks_file_name = ".oracle_".concat(configFile.eth.network, "_block-").concat(configFile.eth.oracleAccount);
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eth_api = new EndpointSwitcher_1.EthApi(this.config.eth.netId, this.config.eth.endpoints);
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length);
+        this.version = 0;
+        switch (this.config.version) {
+            case 2:
+                this.version = 2;
+                this.claimed_logEvent = EthOracle.version_v2.claimed;
+                this.teleport_logEvent = EthOracle.version_v2.teleport;
+                break;
+            case 1: this.version = 1;
+            case 0:
+            default:
+                this.claimed_logEvent = EthOracle.version_v1.claimed;
+                this.teleport_logEvent = EthOracle.version_v1.teleport;
+        }
     }
     /**
      * Get object of the data of an "claimed"-event on eth chain
@@ -88,11 +105,31 @@ var EthOracle = /** @class */ (function () {
      * @param config Contains information of precision and symbol of the token as well as the oracle name of this contract
      * @returns
      */
-    EthOracle.extractEthClaimedData = function (data, config) {
-        var id = data[0].toNumber();
-        var to_eth = data[1].replace('0x', '') + '000000000000000000000000';
-        var quantity = (data[2].toNumber() / Math.pow(10, config.precision)).toFixed(config.precision) + ' ' + config.symbol;
-        return { oracle_name: config.eos.oracleAccount, id: id, to_eth: to_eth, quantity: quantity, };
+    EthOracle.extractEthClaimedData = function (version, data, config) {
+        if (version >= 2) {
+            var chainNet = data[0].toString();
+            var chainId = data[1].toNumber();
+            if (config.eos.id == undefined || config.eos.id != chainId) {
+                console.log('Found teleport with other chain id');
+                return false;
+            }
+            if (config.eos.netId.substring(chainNet.length) != chainNet) {
+                console.log('Found teleport with other net id');
+                return false;
+            }
+            var id = BigInt(data[2].toString());
+            var to_eth = data[3].replace('0x', '') + '000000000000000000000000';
+            var amount = BigInt(data[4].toString());
+            var quantity = amountToAsset(amount, config.symbol, config.precision);
+            return { oracle_name: config.eos.oracleAccount, id: id, to_eth: to_eth, quantity: quantity };
+        }
+        else {
+            var id = BigInt(data[0].toString());
+            var to_eth = data[1].replace('0x', '') + '000000000000000000000000';
+            var amount = BigInt(data[2].toString());
+            var quantity = amountToAsset(amount, config.symbol, config.precision);
+            return { oracle_name: config.eos.oracleAccount, id: id, to_eth: to_eth, quantity: quantity };
+        }
     };
     /**
      * Get object of the data of an "teleport"-event on eth chain
@@ -100,17 +137,23 @@ var EthOracle = /** @class */ (function () {
      * @param config Contains information of precision and symbol of the token as well as the oracle name of this contract
      * @returns
      */
-    EthOracle.extractEthTeleportData = function (data, transactionHash, config) {
-        var tokens = data[1].toNumber();
-        if (tokens <= 0) {
+    EthOracle.extractEthTeleportData = function (version, data, transactionHash, config) {
+        var to = data[0];
+        var amount = BigInt(data[1].toString());
+        if (amount == BigInt(0)) {
             throw new Error('Tokens are less than or equal to 0');
         }
-        var to = data[0];
-        var chain_id = data[2].toNumber();
-        var amount = (tokens / Math.pow(10, config.precision)).toFixed(config.precision);
-        var quantity = "".concat(amount, " ").concat(config.symbol);
+        var quantity = amountToAsset(amount, config.symbol, config.precision);
         var txid = transactionHash.replace(/^0x/, '');
-        return { chain_id: chain_id, confirmed: true, quantity: quantity, to: to, oracle_name: config.eos.oracleAccount, ref: txid };
+        if (version >= 2) {
+            var index = BigInt(data[2].toString());
+            var chain_id = data[3].toNumber();
+            return { chain_id: chain_id, confirmed: true, quantity: quantity, to: to, oracle_name: config.eos.oracleAccount, index: index, ref: txid };
+        }
+        else {
+            var chain_id = data[2].toNumber();
+            return { chain_id: chain_id, confirmed: true, quantity: quantity, to: to, oracle_name: config.eos.oracleAccount, ref: txid };
+        }
     };
     /**
      * Wait until an event got enough confirmations and validations by other endpoints
@@ -216,7 +259,7 @@ var EthOracle = /** @class */ (function () {
                             fromBlock: from_block,
                             toBlock: to_block,
                             address: this.config.eth.teleportContract,
-                            topics: [this.claimed_topic],
+                            topics: [this.claimed_logEvent.topic],
                         };
                         return [4 /*yield*/, this.eth_api.getProvider().getLogs(query)
                             // Mark each claimed event on eosio chain as claimed
@@ -232,8 +275,13 @@ var EthOracle = /** @class */ (function () {
                     case 4:
                         if (!(res_1_1 = _b.sent(), !res_1_1.done)) return [3 /*break*/, 8];
                         entry = res_1_1.value;
-                        decodedData = ethers_1.ethers.utils.defaultAbiCoder.decode(['uint64', 'address', 'uint'], entry.data);
-                        eosioData = EthOracle.extractEthClaimedData(decodedData, this.config);
+                        decodedData = ethers_1.ethers.utils.defaultAbiCoder.decode(this.claimed_logEvent.decode, entry.data);
+                        eosioData = EthOracle.extractEthClaimedData(this.version, decodedData, this.config);
+                        // When teleport does not refer to this eosio chain
+                        if (eosioData === false) {
+                            console.log('Continue');
+                            return [3 /*break*/, 7];
+                        }
                         return [4 /*yield*/, this.await_confirmation(entry)];
                     case 5:
                         // Wait for confirmation of each transaction before continuing
@@ -370,7 +418,7 @@ var EthOracle = /** @class */ (function () {
                             fromBlock: from_block,
                             toBlock: to_block,
                             address: this.config.eth.teleportContract,
-                            topics: [this.teleport_topic],
+                            topics: [this.teleport_logEvent.topic],
                         };
                         return [4 /*yield*/, this.eth_api.getProvider().getLogs(query)
                             // Confirm each teleport event on eosio chain
@@ -386,8 +434,8 @@ var EthOracle = /** @class */ (function () {
                     case 4:
                         if (!(res_2_1 = _b.sent(), !res_2_1.done)) return [3 /*break*/, 8];
                         entry = res_2_1.value;
-                        decodedData = ethers_1.ethers.utils.defaultAbiCoder.decode(['string', 'uint', 'uint'], entry.data);
-                        eosioData = EthOracle.extractEthTeleportData(decodedData, entry.transactionHash, this.config);
+                        decodedData = ethers_1.ethers.utils.defaultAbiCoder.decode(this.teleport_logEvent.decode, entry.data);
+                        eosioData = EthOracle.extractEthTeleportData(this.version, decodedData, entry.transactionHash, this.config);
                         // Check id is equal to recipient chain
                         if (this.config.eos.id !== undefined && eosioData.chain_id !== Number(this.config.eos.id)) {
                             console.log("Skip teleport event with ".concat(eosioData.to, " as recipient and ref of ").concat(eosioData.ref, " because the chain id ").concat(eosioData.chain_id, " referes to another blockchain."));
@@ -406,7 +454,7 @@ var EthOracle = /** @class */ (function () {
                             return [3 /*break*/, 7];
                         }
                         // Set the id as the id of the sender chain
-                        if (this.config.eth.id !== undefined) {
+                        if (this.version == 0 && this.config.eth.id !== undefined) {
                             eosioData.chain_id = Number(this.config.eth.id);
                         }
                         actions = [{
@@ -687,6 +735,30 @@ var EthOracle = /** @class */ (function () {
             });
         });
     };
+    EthOracle.version_v1 = {
+        claimed: {
+            // Claimed(uint64,address,uint256)
+            decode: ['uint64', 'address', 'uint256'],
+            topic: '0xf20fc6923b8057dd0c3b606483fcaa038229bb36ebc35a0040e3eaa39cf97b17',
+        },
+        teleport: {
+            // Teleport(address,string,uint256,uint256)
+            decode: ['address', 'string', 'uint256', 'uint256'],
+            topic: '0x622824274e0937ee319b036740cd0887131781bc2032b47eac3e88a1be17f5d5',
+        }
+    };
+    EthOracle.version_v2 = {
+        claimed: {
+            // Claimed(uint64,uint8,uint64,address,uint256)
+            decode: ['uint64', 'uint8', 'uint64', 'address', 'uint256'],
+            topic: '0x4204a123779e33b975c4a5937a9a5a0d9274dcb3e9fa1caecb418d43e395bbf2',
+        },
+        teleport: {
+            // Teleport(address,string,uint256,uint8,uint64)
+            decode: ['address', 'string', 'uint256', 'uint8', 'uint64'],
+            topic: '0x4431c332d53bf40750f07d7a09805bc077fb535bc028e78a60dcc8a43bf25e7e',
+        }
+    };
     EthOracle.MIN_BLOCKS_TO_WAIT = 5;
     return EthOracle;
 }());
@@ -732,7 +804,11 @@ else if (process.env['START_BLOCK']) {
     startRef = start_block_env;
 }
 if (configFile.eos.epVerifications > configFile.eos.endpoints.length) {
-    console.error('Error: epVerifications cannot be greater than given amount of endpoints');
+    console.error('Error: eosio epVerifications cannot be greater than given amount of endpoints');
+    process.exit(1);
+}
+if (configFile.eth.epVerifications > configFile.eth.endpoints.length) {
+    console.error('Error: eosio epVerifications cannot be greater than given amount of endpoints');
     process.exit(1);
 }
 var waitCycle = undefined;
