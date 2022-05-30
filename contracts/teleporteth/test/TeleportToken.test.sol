@@ -12,7 +12,7 @@ contract TestTeleportToken {
 
     // tel.transfer(, tokens);
 
-    uint expected = 10000000000 * 10**uint(4);
+    uint expected = 320000000 * 10**uint(4);
 
     Assert.equal(tel.balanceOf(address(0)), expected, "Owner should have 10000000000 Token initially");
   }

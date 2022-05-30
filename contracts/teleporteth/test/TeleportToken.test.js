@@ -57,7 +57,7 @@ const TestSettings = {
   },
   Token: {
     symbol: 'SAVACT',
-    totalSupply: 100000000000000,
+    totalSupply: 3200000000000,
     decimals: 4,
   },
   threshold: 3,

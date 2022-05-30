@@ -13,18 +13,9 @@ import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { EosApi, EthApi } from './EndpointSwitcher'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
+import {sleep, toHexString, fromHexString} from '../scripts/helpers'
 
 type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string, id?: number, netId: string}}
-
-/**
- * Use this function with await to let the thread sleep for the defined amount of time
- * @param ms Milliseconds
- */
-const sleep = async (ms: number) => {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms)
-    })
-}
 
 function amountToAsset(amount: bigint, symbol_name: string, precision: number){
     let s = amount.toString().padStart(precision, '0')
@@ -47,20 +38,20 @@ class EthOracle {
         },
         teleport : {
             // Teleport(address,string,uint256,uint256)
-            decode: ['address','string','uint256','uint256'],
+            decode: ['string','uint256','uint256'],         // Address is indexed
             topic: '0x622824274e0937ee319b036740cd0887131781bc2032b47eac3e88a1be17f5d5',
         }
     }
     static version_v2 = {
         claimed : {
-            // Claimed(uint64,uint8,uint64,address,uint256)
-            decode: ['uint64','uint8','uint64','address','uint256'],
-            topic: '0x4204a123779e33b975c4a5937a9a5a0d9274dcb3e9fa1caecb418d43e395bbf2',
+            // Claimed(bytes32,address,uint256)
+            decode: ['bytes32','address','uint256'],
+            topic: '0x0508a8b4117d9a7b3d8f5895f6413e61b4f9a2df35afbfb41e78d0ecfff1843f',
         },
         teleport : {
-            // Teleport(address,string,uint256,uint8,uint64)
-            decode: ['address','string','uint256','uint8','uint64'],
-            topic: '0x4431c332d53bf40750f07d7a09805bc077fb535bc028e78a60dcc8a43bf25e7e',
+            // Teleport(address,string,uint256)
+            decode: ['string','uint256'],                   // Address is indexed
+            topic: '0xc8cee5634900c8bdd1ce6ab2e4fdac4d0c4cb5a3cce1c6d5f447cf84a3ddf414',
         }
     }
     
@@ -76,12 +67,22 @@ class EthOracle {
     private minTrySend = 3
 
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider){
+        // Standardise the net id
+        this.config.eos.netId = this.config.eos.netId.toLowerCase()
+        if(this.config.eos.netId[1] == 'x'){
+            this.config.eos.netId = this.config.eos.netId.substring(2)
+        }
+
+        // Set further initial data
         this.blocksToWait = typeof config.eth.blocksToWait == 'number' && config.eth.blocksToWait > EthOracle.MIN_BLOCKS_TO_WAIT? config.eth.blocksToWait : EthOracle.MIN_BLOCKS_TO_WAIT
         this.blocks_file_name = `.oracle_${configFile.eth.network}_block-${configFile.eth.oracleAccount}`
+        this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
+        
+        // Create interfaces for eosio and eth chains
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.eth_api = new EthApi(this.config.eth.netId, this.config.eth.endpoints)
-        this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
 
+        // Set the version specific data
         this.version = 0
         switch(this.config.version){
             case 2: this.version = 2
@@ -102,23 +103,32 @@ class EthOracle {
      * @param config Contains information of precision and symbol of the token as well as the oracle name of this contract 
      * @returns 
      */
-    static extractEthClaimedData (version: number, data: ethers.utils.Result, config: EthDataConfig): eosio_claim_data | false {
+    static extractEthClaimedData(version: number, data: ethers.utils.Result, config: EthDataConfig): eosio_claim_data | false {
         if(version >= 2){
-            const chainNet = data[0].toString();
-            const chainId = data[1].toNumber();
-            if(config.eos.id == undefined || config.eos.id != chainId){
-                console.log('Found teleport with other chain id');
+            let chainNet = data[0].toString();
+            if(chainNet.length < 10){
+                console.log('Wrong length of net id', chainNet);
                 return false
             }
-            if(config.eos.netId.substring(chainNet.length) != chainNet){
-                console.log('Found teleport with other net id');
+            chainNet = chainNet.substring(2, 10).toLowerCase()
+            if(config.eos.netId.substring(0, 8) != chainNet){
+                console.log(`Found teleport with other net id ${chainNet} is not queal to ${config.eos.netId.substring(0, 8)}`);
                 return false
             }
 
-            const id = BigInt(data[2].toString())
-            const to_eth = data[3].replace('0x', '') + '000000000000000000000000'
-            const amount = BigInt(data[4].toString())
-            const quantity = amountToAsset(amount, config.symbol, config.precision)
+            const to_eth = data[1].replace('0x', '') + '000000000000000000000000'
+
+            const combiparam = data[2].toHexString()
+            if(combiparam.length != 66){
+                console.log('Wrong combined parameters', combiparam);
+                return false
+            }
+            const {chainId, id, quantity} = EthOracle.getLogTelParams(combiparam.substring(2)) 
+            if(chainId != config.eos.id){
+                console.log('Wrong chain id', chainId);
+                return false
+            }
+                      
             return {oracle_name: config.eos.oracleAccount, id, to_eth, quantity }
         } else {
             const id = BigInt(data[0].toString())
@@ -128,6 +138,19 @@ class EthOracle {
             return { oracle_name: config.eos.oracleAccount, id, to_eth, quantity }
         }
     }
+
+    static getLogTelParams(hexString: string) {
+        const chainId = Number('0x' + hexString.slice(63, 64))
+        const id = BigInt('0x' +hexString.substring(64,128))
+        const symbol_and_precision = hexString.substring(128, 192)
+        const amount = BigInt('0x' +hexString.substring(192))
+        
+        const symbolhex = symbol_and_precision.substring(32, 64);
+        let symbol = Buffer.from(symbolhex, 'hex').toString()
+        const precision = Number('0x' +symbol_and_precision.substring(0, 32))
+        const quantity = amountToAsset(amount, symbol, precision)
+        return {chainId, id, amount, quantity}
+    }
     
     /**
      * Get object of the data of an "teleport"-event on eth chain
@@ -135,22 +158,40 @@ class EthOracle {
      * @param config Contains information of precision and symbol of the token as well as the oracle name of this contract 
      * @returns 
      */
-    static extractEthTeleportData(version: number, data: ethers.utils.Result, transactionHash: string, config: EthDataConfig): eosio_teleport_data {
-        const to = data[0]
-        
-        const amount = BigInt(data[1].toString())
-        if (amount == BigInt(0)) {
-            throw new Error('Tokens are less than or equal to 0')
-        }
-        const quantity = amountToAsset(amount, config.symbol, config.precision)
-        
+    static extractEthTeleportData(version: number, data: ethers.utils.Result, transactionHash: string, config: EthDataConfig): eosio_teleport_data | false{        
         const txid = transactionHash.replace(/^0x/, '')
-
         if(version >= 2){
-            let index = BigInt(data[2].toString())
+            //- Test print out
+            for(let i = 0; i < data.length; i++){
+                console.log(`data[${i}] ${typeof data[0]}`, data[0]);
+            }
+
+            const to = data[0]
+
+            const combiparam = data[1].toHexString()
+            if(combiparam.length != 66){
+                console.log('Wrong combined parameters', combiparam);
+                return false
+            }
+            const {chainId, id, quantity, amount} = EthOracle.getLogTelParams(combiparam.substring(2)) 
+            if(chainId != config.eos.id){
+                console.log('Wrong chain id', chainId)
+                return false
+            }
+            if (amount == BigInt(0)) {
+                console.log('Tokens are less than or equal to 0')
+                return false
+            }
+
             let chain_id = data[3].toNumber() as number
-            return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, index, ref: txid }
+            return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, index: id, ref: txid }
         } else {
+            const to = data[0]
+            const amount = BigInt(data[1].toString())
+            if (amount == BigInt(0)) {
+                throw new Error('Tokens are less than or equal to 0')
+            }
+            const quantity = amountToAsset(amount, config.symbol, config.precision)
             let chain_id = data[2].toNumber() as number
             return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, ref: txid }
         }      
@@ -346,7 +387,11 @@ class EthOracle {
             // Extract data from teleport eth event
             const decodedData = ethers.utils.defaultAbiCoder.decode(this.teleport_logEvent.decode, entry.data)
             const eosioData = EthOracle.extractEthTeleportData(this.version, decodedData, entry.transactionHash, this.config)
-          
+            if(eosioData === false){
+                console.log('Continue');
+                continue
+            }
+
             // Check id is equal to recipient chain
             if(this.config.eos.id !== undefined && eosioData.chain_id !== Number(this.config.eos.id)){
                 console.log(`Skip teleport event with ${eosioData.to} as recipient and ref of ${eosioData.ref} because the chain id ${eosioData.chain_id} referes to another blockchain.`)

@@ -57,7 +57,8 @@ void teleporteos::transfer(name from, name to, asset quantity, string memo) {
 
 ACTION teleporteos::withdraw(name account, asset quantity) {
   require_auth(account);
-
+  check(quantity.is_valid(), "Invalid quantity");
+  
   deposits_table _deposits(get_self(), get_self().value);
   auto deposit = _deposits.find(account.value);
   check(deposit != _deposits.end(), "Deposit not found, please transfer the tokens first");
@@ -436,6 +437,8 @@ ACTION teleporteos::freeze(const bool in, const bool out, const bool oracles, co
 ACTION teleporteos::setmin(const asset min){
   require_auth(get_self());
   
+  check(min.is_valid(), "Invalid asset");
+  check(min.amount > 0, "Must set a positive asset");
   check(min.symbol == TOKEN_SYMBOL, "Wrong token");
 
   auto stat = _stats.find(TOKEN_SYMBOL.raw());
@@ -449,11 +452,14 @@ ACTION teleporteos::setmin(const asset min){
 
 ACTION teleporteos::setfee(const asset fixfee, const double varfee){
   require_auth(get_self());
-  auto stat = _stats.find(TOKEN_SYMBOL.raw());
+  
+  check(fixfee.is_valid(), "Invalid fixfee");
+  check(fixfee.amount > 0, "Must set a positive fixfee");
   check(fixfee.symbol == TOKEN_SYMBOL, "Wrong token");
   check(varfee <= 0.2 && varfee >= 0, "Variable fee has to be between 0 and 0.20");
 
   // Pay off all oracles first
+  auto stat = _stats.find(TOKEN_SYMBOL.raw());
   auto rest = paymentsToOracles(stat);
 
   // Set new fee and remaining collected

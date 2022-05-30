@@ -45,42 +45,16 @@ var text_encoding_1 = require("text-encoding");
 var ethereumjs_util_1 = require("ethereumjs-util");
 var EndpointSwitcher_1 = require("./EndpointSwitcher");
 var yargs_1 = __importDefault(require("yargs"));
-/**
- * Convert an Uint8Array to an hex in string format
- * @param bytes Uint8Array
- * @returns Hex in string format
- */
-function toHexString(bytes) {
-    return bytes.reduce(function (str, byte) { return str + byte.toString(16).padStart(2, '0'); }, '');
-}
-/**
- * Convert a hex in string format to an Uint8Array
- * @param hexString Hex in string format
- * @returns Uint8Array
- */
-function fromHexString(hexString) {
-    var str = hexString.match(/.{1,2}/g);
-    return str == null ? new Uint8Array() : new Uint8Array(str.map(function (byte) { return parseInt(byte, 16); }));
-}
-/**
- * Use this function with await to let the thread sleep for the defined amount of time
- * @param ms Milliseconds
- */
-var sleep = function (ms) { return __awaiter(void 0, void 0, void 0, function () {
-    return __generator(this, function (_a) {
-        return [2 /*return*/, new Promise(function (resolve) {
-                setTimeout(resolve, ms);
-            })];
-    });
-}); };
+var helpers_1 = require("../scripts/helpers");
 var EosOracle = /** @class */ (function () {
-    function EosOracle(config, signatureProvider) {
+    function EosOracle(config, signatureProvider, force) {
         this.config = config;
         this.signatureProvider = signatureProvider;
+        this.force = force;
         this.running = false;
         this.irreversible_time = 0;
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
-        this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: fromHexString(config.eos.netId.substring(0, 8)) };
+        this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: (0, helpers_1.fromHexString)(config.eos.netId.substring(0, 8)) };
     }
     /**
      * Send sign a teleport. Repeats itself until a defined amount of tries are reached
@@ -228,7 +202,7 @@ var EosOracle = /** @class */ (function () {
         sb.pushName(teleport.account);
         sb.pushAsset(teleport.quantity);
         sb.push(teleport.chain_id);
-        sb.pushArray(fromHexString(teleport.eth_address));
+        sb.pushArray((0, helpers_1.fromHexString)(teleport.eth_address));
         return sb.array.slice(0, logSize);
     };
     /**
@@ -250,7 +224,7 @@ var EosOracle = /** @class */ (function () {
         sb.push(teleport.chain_id);
         sb.pushName(eosio_chain_data.tel_contract);
         sb.pushUint8ArrayChecked(eosio_chain_data.short_net_id, 4);
-        sb.pushArray(fromHexString(teleport.eth_address));
+        sb.pushArray((0, helpers_1.fromHexString)(teleport.eth_address));
         return sb.array.slice(0, logSize);
     };
     /**
@@ -411,14 +385,18 @@ var EosOracle = /** @class */ (function () {
                         // Check if already claimed anf if the required amount of signes is already reached
                         if (item.claimed) {
                             console.log("Teleport id ".concat(item.id, ", is already claimed. \u2714\uFE0F"));
-                            lastHandledId = item.id + 1;
-                            return [3 /*break*/, 7];
+                            if (!this.force) {
+                                lastHandledId = item.id + 1;
+                                return [3 /*break*/, 7];
+                            }
                         }
                         // Check if the required amount of signes is already reached
                         if (item.oracles.length >= this.config.confirmations) {
                             console.log("Teleport id ".concat(item.id, ", has already sufficient confirmations. \u2714\uFE0F"));
-                            lastHandledId = item.id + 1;
-                            return [3 /*break*/, 7];
+                            if (!this.force) {
+                                lastHandledId = item.id + 1;
+                                return [3 /*break*/, 7];
+                            }
                         }
                         // Check if this oracle account has already signed
                         if (item.oracles.find(function (oracle) { return oracle == _this.config.eos.oracleAccount; }) != undefined) {
@@ -428,7 +406,7 @@ var EosOracle = /** @class */ (function () {
                         }
                         logData = void 0;
                         verifyLogData = EosOracle.serializeLogData_v1(item, 69);
-                        verifyLogDataHex = toHexString(verifyLogData);
+                        verifyLogDataHex = (0, helpers_1.toHexString)(verifyLogData);
                         isVerifyed = true;
                         for (i = 0; i < this.config.eos.epVerifications - 1; i++) {
                             if (verifyLogDataHex != verify_data[i][rowIndex].slice(0, verifyLogData.length * 2)) {
@@ -518,7 +496,7 @@ var EosOracle = /** @class */ (function () {
                     case 1:
                         if (!(i < s)) return [3 /*break*/, 4];
                         process.stdout.write("\uD83D\uDCA4 ".concat(i, " s / ").concat(s, " s \uD83D\uDCA4"));
-                        return [4 /*yield*/, sleep(1000)];
+                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
                     case 2:
                         _a.sent();
                         process.stdout.write("\r\x1b[K");
@@ -609,6 +587,10 @@ var argv = yargs_1.default
     description: 'Seconds to wait after finishing all current teleports',
     type: 'number'
 })
+    .option('force', {
+    description: 'Force signing, even when it is already completed or signed by other oracles',
+    type: 'boolean'
+})
     .option('config', {
     alias: 'c',
     description: 'Path of config file',
@@ -621,7 +603,7 @@ process.title = "oracle-eos ".concat(config_path);
 var configFile = require(config_path);
 // Configure eosjs specific propperties
 var signatureProvider = new eosjs_jssig_1.JsSignatureProvider([configFile.eos.privateKey]);
-var eosOracle = new EosOracle(configFile, signatureProvider);
+var eosOracle = new EosOracle(configFile, signatureProvider, argv.force);
 // Get time to wait for each round by config file or comsole parameters
 var waitCycle = undefined;
 if (typeof configFile.eos.waitCycle == 'number') {

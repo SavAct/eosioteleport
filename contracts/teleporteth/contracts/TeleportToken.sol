@@ -140,7 +140,7 @@ contract Oracled is Owned {
     mapping(address => bool) public oracles;
 
     modifier onlyOracle {
-        require(oracles[msg.sender] == true, "Account is not a registered oracle");
+        require(oracles[msg.sender] == true, "Oracle is not registered");
 
         _;
     }
@@ -200,14 +200,14 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     mapping(address => mapping(address => uint)) allowed;
 
     mapping(bytes32 => mapping(uint64 => mapping(address => bool))) signed;
-    mapping(bytes32 => mapping(uint64 => bool)) claimed;
+    mapping(bytes32 => mapping(uint64 => bool)) public claimed;
 
     mapping(uint8 => uint64) public indexes;
     mapping(bytes32 => Chain) public chains;
     mapping(uint8 => bytes32) private chainNetId;
 
-    event Teleport(address indexed from, string to, uint tokens, uint8 chainId, uint64 index);
-    event Claimed(bytes32 chainNet, uint8 chainId, uint64 id, address to, uint tokens);
+    event Teleport(address indexed from, string to, uint256 transferData);
+    event Claimed(bytes32 chainNet, address to, uint256 transferData);
 
     // ------------------------------------------------------------------------
     // Constructor
@@ -216,7 +216,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         symbol = "SAVACT";                                  // EOSIO token symbol name
         name = "SavAct System Token";
         decimals = 4;                                       // EOSIO token symbol precision
-        _totalSupply = 10000000000 * (10**uint(decimals));  // Total supply of the EOSIO token
+        _totalSupply = 320000000 * (10**uint(decimals));    // Total supply of the EOSIO token. Has to be lower than 18446744073709551615 (max of uint64)
+        require(_totalSupply <= 0xFFFFFFFFFFFFFFFF, "Total supply is over uint64");
         threshold = 3;
         thisChainId = 2;
         minteleport = 0;
@@ -230,7 +231,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         Chain storage cByChainId = chains[chainNetId[chainId]];
         require(!c.active, "Chain is already active");
         require(chainId != thisChainId, "Chain id is used by this chain");
-        require(!cByChainId.active, "Chain id is used by another chain");
+        require(!cByChainId.active, "Chain id is already used");
         c.netId = netId;
         c.contract_name = contract_name;
         c.chainId = chainId;
@@ -267,7 +268,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // ------------------------------------------------------------------------
     // Get the claimed status of a teleport
     // ------------------------------------------------------------------------
-    function getClaimed(uint8 chainId, uint64 index) public view returns (bool) {
+    function isClaimed(uint8 chainId, uint64 index) public view returns (bool) {
         return claimed[chainNetId[chainId]][index];
     }
 
@@ -356,7 +357,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         balances[msg.sender] = balances[msg.sender] - tokens;
         balances[address(0)] = balances[address(0)] + tokens;
         emit Transfer(msg.sender, address(0), tokens);
-        emit Teleport(msg.sender, to, tokens, chainid, indexes[chainid]);
+        uint256 extraParams = uint192(_revSymbolRaw) | (uint192(indexes[chainid])<< 64) | (uint192(chainid) << 128);
+        emit Teleport(msg.sender, to, tokens | (extraParams << 64));
         indexes[chainid]++;
 
         return true;
@@ -405,7 +407,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         require(c.active, "Invalid sender net id");
         require(c.contract_name == fromContract, "Invalid sender contract name");
 
-        require(!claimed[td.fromChainNet][td.id], "Already Claimed");
+        require(!claimed[td.fromChainNet][td.id], "Already claimed");
 
         td.fromChainId = c.chainId;
         claimed[td.fromChainNet][td.id] = true;
@@ -439,8 +441,8 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         TeleportData memory td = verifySigData(sigData);
 
         // Verify signatures
-        require(sigData.length == 81 || sigData.length == 69, "Signature data has the wrong size");
-        require(signatures.length <= 10, "Maximum of 10 signatures can be provided");
+        require(sigData.length == 81, "Wrong size of signature data");
+        require(signatures.length <= 10, "Too many signatures");
 
         bytes32 message = keccak256(sigData);
 
@@ -456,12 +458,13 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
             }
         }
 
-        require(numberSigs >= threshold, "Not enough valid signatures provided");
+        require(numberSigs >= threshold, "Not enough valid signatures");
 
         balances[address(0)] = balances[address(0)] - td.quantity;
         balances[td.toAddress] = balances[td.toAddress] + td.quantity;
         emit Transfer(address(0), td.toAddress, td.quantity);
-        emit Claimed(td.fromChainNet, td.fromChainId, td.id, td.toAddress, td.quantity);
+        uint256 extraParams = uint192(_revSymbolRaw) | (uint192(td.id) << 64) |  (uint192(td.fromChainId) << 128);
+        emit Claimed(td.fromChainNet, td.toAddress, td.quantity | extraParams << 64);
 
         return td.toAddress;
     }
@@ -476,7 +479,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
 
     function updateThreshold(uint8 newThreshold) public onlyOwner returns (bool success) {
         if (newThreshold > 0){
-            require(newThreshold <= 10, "Threshold has maximum of 10");
+            require(newThreshold <= 10, "Maximum threshold is 10");
 
             threshold = newThreshold;
 
@@ -488,7 +491,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
 
     function updateChainId(uint8 newChainId) public onlyOwner returns (bool success) {
         if (newChainId > 0){
-            require(newChainId <= 255, "ChainID is too big");
+            require(newChainId <= 255, "Chain id is too big");
             thisChainId = newChainId;
 
             return true;

@@ -5,36 +5,8 @@ import { TextDecoder, TextEncoder } from "text-encoding"
 import { ecsign, keccak, toRpcSig } from "ethereumjs-util"
 import { EosApi } from './EndpointSwitcher'
 import { ConfigType, TeleportTableEntry } from './CommonTypes'
-import yargs, { number, string } from 'yargs'
-
-/**
- * Convert an Uint8Array to an hex in string format
- * @param bytes Uint8Array
- * @returns Hex in string format
- */
-function toHexString(bytes: Uint8Array){
-    return bytes.reduce((str, byte) => str + byte.toString(16).padStart(2, '0'), '')
-}
-
-/**
- * Convert a hex in string format to an Uint8Array
- * @param hexString Hex in string format
- * @returns Uint8Array
- */
-function fromHexString(hexString: string){
-    let str = hexString.match(/.{1,2}/g)
-    return str == null? new Uint8Array() : new Uint8Array(str.map(byte => parseInt(byte, 16)))
-}
-
-/**
- * Use this function with await to let the thread sleep for the defined amount of time
- * @param ms Milliseconds
- */
-const sleep = async (ms: number) => {
-    return new Promise((resolve) => {
-        setTimeout(resolve, ms)
-    })
-}
+import yargs from 'yargs'
+import {sleep, toHexString, fromHexString} from '../scripts/helpers'
 
 // /**
 //  * Check if two Uint8Arrays are equal
@@ -65,10 +37,9 @@ class EosOracle {
     private irreversible_time = 0
     static maxWait = 180    // The max amount of seconds to wait to check an entry again if it is irreversible now
 
-    constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider){
+    constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider, private force: boolean){
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.eosio_data = {tel_contract: config.eos.teleportContract, short_net_id: fromHexString(config.eos.netId.substring(0, 8))}
-
     }
 
     /**
@@ -331,14 +302,18 @@ class EosOracle {
             // Check if already claimed anf if the required amount of signes is already reached
             if(item.claimed){
                 console.log(`Teleport id ${item.id}, is already claimed. ✔️`)
-                lastHandledId = item.id + 1
-                continue
+                if(!this.force){
+                    lastHandledId = item.id + 1
+                    continue
+                }
             }
             // Check if the required amount of signes is already reached
             if(item.oracles.length >= this.config.confirmations){
                 console.log(`Teleport id ${item.id}, has already sufficient confirmations. ✔️`)
-                lastHandledId = item.id + 1
-                continue
+                if(!this.force){
+                    lastHandledId = item.id + 1
+                    continue
+                }
             }
             // Check if this oracle account has already signed
             if(item.oracles.find(oracle => oracle == this.config.eos.oracleAccount) != undefined){
@@ -471,6 +446,10 @@ const argv = yargs
         description: 'Seconds to wait after finishing all current teleports',
         type: 'number'
     })
+    .option('force', {
+        description: 'Force signing, even when it is already completed or signed by other oracles',
+        type: 'boolean'
+    })
     .option('config', {
         alias: 'c',
         description: 'Path of config file',
@@ -481,6 +460,7 @@ const argv = yargs
         amount: number,
         signs: number,
         waiter: number,
+        force: boolean,
         config: string,
     }
 
@@ -491,7 +471,7 @@ const configFile : ConfigType = require(config_path)
 
 // Configure eosjs specific propperties
 const signatureProvider = new JsSignatureProvider([configFile.eos.privateKey])
-const eosOracle = new EosOracle(configFile, signatureProvider)
+const eosOracle = new EosOracle(configFile, signatureProvider, argv.force)
 
 // Get time to wait for each round by config file or comsole parameters
 let waitCycle : undefined | number = undefined

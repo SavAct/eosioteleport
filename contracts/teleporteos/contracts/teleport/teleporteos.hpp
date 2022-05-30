@@ -213,7 +213,6 @@ public:
   ACTION claimed(name oracle_name, uint64_t id, checksum256 to_eth, asset quantity);
   ACTION regoracle(name oracle_name);
   ACTION unregoracle(name oracle_name);
-  ACTION sign(string signature);
 
   /**
    * @brief Delete all receipt entries until a receipt id
