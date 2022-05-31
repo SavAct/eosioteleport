@@ -350,14 +350,15 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     // chainId : The chain id that they will be sent to
     // ------------------------------------------------------------------------
     function teleport(string memory to, uint tokens, uint8 chainid) public returns (bool success) {
-        if(freezedTeleport || minteleport > tokens){
+        if(freezedTeleport){
             revert();
         }
+        require(minteleport <= tokens, "Token amount is to low");
 
         balances[msg.sender] = balances[msg.sender] - tokens;
         balances[address(0)] = balances[address(0)] + tokens;
         emit Transfer(msg.sender, address(0), tokens);
-        uint256 extraParams = uint192(_revSymbolRaw) | (uint192(indexes[chainid])<< 64) | (uint192(chainid) << 128);
+        uint256 extraParams = uint256(_revSymbolRaw) | (uint256(indexes[chainid])<< 64) | (uint256(chainid) << 128);
         emit Teleport(msg.sender, to, tokens | (extraParams << 64));
         indexes[chainid]++;
 
@@ -463,7 +464,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
         balances[address(0)] = balances[address(0)] - td.quantity;
         balances[td.toAddress] = balances[td.toAddress] + td.quantity;
         emit Transfer(address(0), td.toAddress, td.quantity);
-        uint256 extraParams = uint192(_revSymbolRaw) | (uint192(td.id) << 64) |  (uint192(td.fromChainId) << 128);
+        uint256 extraParams = uint256(_revSymbolRaw) | (uint256(td.id) << 64) |  (uint256(td.fromChainId) << 128);
         emit Claimed(td.fromChainNet, td.toAddress, td.quantity | extraParams << 64);
 
         return td.toAddress;
@@ -480,6 +481,7 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     function updateThreshold(uint8 newThreshold) public onlyOwner returns (bool success) {
         if (newThreshold > 0){
             require(newThreshold <= 10, "Maximum threshold is 10");
+            require(newThreshold == threshold, "No new value for threshold");
 
             threshold = newThreshold;
 

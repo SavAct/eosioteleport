@@ -117,13 +117,13 @@ var EthOracle = /** @class */ (function () {
             }
             var to_eth = data[1].replace('0x', '') + '000000000000000000000000';
             var combiparam = data[2].toHexString();
-            if (combiparam.length != 66) {
+            if (combiparam.length > 66) {
                 console.log('Wrong combined parameters', combiparam);
                 return false;
             }
-            var _a = EthOracle.getLogTelParams(combiparam.substring(2)), chainId = _a.chainId, id = _a.id, quantity = _a.quantity;
-            if (chainId != config.eos.id) {
-                console.log('Wrong chain id', chainId);
+            var _a = EthOracle.getLogTelParams(combiparam.substring(2).padStart(64, '0')), chain_id = _a.chain_id, id = _a.id, quantity = _a.quantity;
+            if (chain_id != config.eos.id) {
+                console.log('Wrong chain id', chain_id);
                 return false;
             }
             return { oracle_name: config.eos.oracleAccount, id: id, to_eth: to_eth, quantity: quantity };
@@ -137,15 +137,15 @@ var EthOracle = /** @class */ (function () {
         }
     };
     EthOracle.getLogTelParams = function (hexString) {
-        var chainId = Number('0x' + hexString.slice(63, 64));
-        var id = BigInt('0x' + hexString.substring(64, 128));
-        var symbol_and_precision = hexString.substring(128, 192);
-        var amount = BigInt('0x' + hexString.substring(192));
-        var symbolhex = symbol_and_precision.substring(32, 64);
-        var symbol = Buffer.from(symbolhex, 'hex').toString();
-        var precision = Number('0x' + symbol_and_precision.substring(0, 32));
+        var chain_id = Number('0x' + hexString.slice(14, 16));
+        var id = BigInt('0x' + hexString.substring(16, 32));
+        var symbol_and_precision = hexString.substring(32, 48);
+        var amount = BigInt('0x' + hexString.substring(48));
+        var symbolhex = symbol_and_precision.substring(2);
+        var symbol = (0, helpers_1.hexToString)(symbolhex);
+        var precision = Number('0x' + symbol_and_precision.substring(0, 2));
         var quantity = amountToAsset(amount, symbol, precision);
-        return { chainId: chainId, id: id, amount: amount, quantity: quantity };
+        return { chain_id: chain_id, id: id, quantity: quantity, amount: amount };
     };
     /**
      * Get object of the data of an "teleport"-event on eth chain
@@ -156,26 +156,21 @@ var EthOracle = /** @class */ (function () {
     EthOracle.extractEthTeleportData = function (version, data, transactionHash, config) {
         var txid = transactionHash.replace(/^0x/, '');
         if (version >= 2) {
-            //- Test print out
-            for (var i = 0; i < data.length; i++) {
-                console.log("data[".concat(i, "] ").concat(typeof data[0]), data[0]);
-            }
             var to = data[0];
             var combiparam = data[1].toHexString();
-            if (combiparam.length != 66) {
+            if (combiparam.length > 66) {
                 console.log('Wrong combined parameters', combiparam);
                 return false;
             }
-            var _a = EthOracle.getLogTelParams(combiparam.substring(2)), chainId = _a.chainId, id = _a.id, quantity = _a.quantity, amount = _a.amount;
-            if (chainId != config.eos.id) {
-                console.log('Wrong chain id', chainId);
+            var _a = EthOracle.getLogTelParams(combiparam.substring(2).padStart(64, '0')), chain_id = _a.chain_id, id = _a.id, quantity = _a.quantity, amount = _a.amount;
+            if (chain_id != config.eos.id) {
+                console.log('Wrong chain id', chain_id);
                 return false;
             }
             if (amount == BigInt(0)) {
                 console.log('Tokens are less than or equal to 0');
                 return false;
             }
-            var chain_id = data[3].toNumber();
             return { chain_id: chain_id, confirmed: true, quantity: quantity, to: to, oracle_name: config.eos.oracleAccount, index: id, ref: txid };
         }
         else {
@@ -341,7 +336,7 @@ var EthOracle = /** @class */ (function () {
                     case 6:
                         eos_res = _b.sent();
                         if (eos_res === false) {
-                            console.log("Skip sending claimed of id ".concat(eosioData.id, " to the eosio chain \u274C"));
+                            console.log("Skip sending claimed of id ".concat(eosioData.id, " to eosio chain \u274C"));
                         }
                         else if (eos_res === true) {
                             console.log("Id ".concat(eosioData.id, " is already claimed, account 0x").concat(eosioData.to_eth.substring(0, 40), ", quantity ").concat(eosioData.quantity, " \u2714\uFE0F"));
@@ -414,10 +409,11 @@ var EthOracle = /** @class */ (function () {
                                 error = e_3.message;
                             }
                             // Check if the error appears because the transaction is already claimed or approved
-                            if (error.indexOf('Already marked as claimed') > -1 || error.indexOf('Oracle has already approved') > -1 || error.indexOf('This teleport has already completed') > -1) {
+                            if (error.indexOf('Already marked as claimed') > -1 || error.indexOf('Oracle has already approved') > -1 || error.indexOf('already completed') > -1) {
                                 return [2 /*return*/, true];
                             }
                         }
+                        // console.log('---action', actions);
                         console.error("Error while sending to eosio chain with ".concat(this.eos_api.getEndpoint(), ": ").concat(error, " \u274C"));
                         return [4 /*yield*/, this.eos_api.nextEndpoint()];
                     case 5:
@@ -492,7 +488,7 @@ var EthOracle = /** @class */ (function () {
                             return [3 /*break*/, 7];
                         }
                         // Set the id as the id of the sender chain
-                        if (this.version == 0 && this.config.eth.id !== undefined) {
+                        if (this.version != 0 || this.config.eth.id !== undefined) {
                             eosioData.chain_id = Number(this.config.eth.id);
                         }
                         actions = [{

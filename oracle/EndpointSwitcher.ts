@@ -141,8 +141,8 @@ export class EthApi{
         try{
             this.lastInfo = await this.providers[this.epId].getNetwork()
 
-            console.log('netId', this.netId);
-            console.log('this.lastInfo.chainId', this.lastInfo.chainId);
+            // console.log('netId', this.netId);
+            // console.log('this.lastInfo.chainId', this.lastInfo.chainId);
             
             if(this.netId !== undefined && this.netId != this.lastInfo.chainId){
                 console.log('Delete endpoint because it uses another eosio chain', this.endpoint)

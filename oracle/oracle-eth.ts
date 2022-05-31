@@ -11,9 +11,9 @@ import { ethers } from 'ethers'
 import yargs from 'yargs'
 import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes'
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
-import { EosApi, EthApi } from './EndpointSwitcher'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
-import {sleep, toHexString, fromHexString} from '../scripts/helpers'
+import { EosApi, EthApi } from './EndpointSwitcher'
+import {sleep, toHexString, fromHexString, hexToString} from '../scripts/helpers'
 
 type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string, id?: number, netId: string}}
 
@@ -118,14 +118,15 @@ class EthOracle {
 
             const to_eth = data[1].replace('0x', '') + '000000000000000000000000'
 
-            const combiparam = data[2].toHexString()
-            if(combiparam.length != 66){
-                console.log('Wrong combined parameters', combiparam);
+            let combiparam = data[2].toHexString()
+            if(combiparam.length > 66){
+                console.log('Wrong combined parameters', combiparam)
                 return false
             }
-            const {chainId, id, quantity} = EthOracle.getLogTelParams(combiparam.substring(2)) 
-            if(chainId != config.eos.id){
-                console.log('Wrong chain id', chainId);
+            const {chain_id, id, quantity} = EthOracle.getLogTelParams(combiparam.substring(2).padStart(64, '0')) 
+            
+            if(chain_id != config.eos.id){
+                console.log('Wrong chain id', chain_id)
                 return false
             }
                       
@@ -140,16 +141,15 @@ class EthOracle {
     }
 
     static getLogTelParams(hexString: string) {
-        const chainId = Number('0x' + hexString.slice(63, 64))
-        const id = BigInt('0x' +hexString.substring(64,128))
-        const symbol_and_precision = hexString.substring(128, 192)
-        const amount = BigInt('0x' +hexString.substring(192))
-        
-        const symbolhex = symbol_and_precision.substring(32, 64);
-        let symbol = Buffer.from(symbolhex, 'hex').toString()
-        const precision = Number('0x' +symbol_and_precision.substring(0, 32))
+        const chain_id = Number('0x' + hexString.slice(14, 16))
+        const id = BigInt('0x' + hexString.substring(16,32))
+        const symbol_and_precision = hexString.substring(32, 48)
+        const amount = BigInt('0x' + hexString.substring(48))
+        const symbolhex = symbol_and_precision.substring(2)
+        let symbol = hexToString(symbolhex)
+        const precision = Number('0x' + symbol_and_precision.substring(0, 2))
         const quantity = amountToAsset(amount, symbol, precision)
-        return {chainId, id, amount, quantity}
+        return { chain_id, id, quantity, amount }
     }
     
     /**
@@ -161,21 +161,16 @@ class EthOracle {
     static extractEthTeleportData(version: number, data: ethers.utils.Result, transactionHash: string, config: EthDataConfig): eosio_teleport_data | false{        
         const txid = transactionHash.replace(/^0x/, '')
         if(version >= 2){
-            //- Test print out
-            for(let i = 0; i < data.length; i++){
-                console.log(`data[${i}] ${typeof data[0]}`, data[0]);
-            }
-
             const to = data[0]
 
-            const combiparam = data[1].toHexString()
-            if(combiparam.length != 66){
-                console.log('Wrong combined parameters', combiparam);
+            let combiparam = data[1].toHexString()
+            if(combiparam.length > 66){
+                console.log('Wrong combined parameters', combiparam)
                 return false
             }
-            const {chainId, id, quantity, amount} = EthOracle.getLogTelParams(combiparam.substring(2)) 
-            if(chainId != config.eos.id){
-                console.log('Wrong chain id', chainId)
+            const {chain_id, id, quantity, amount} = EthOracle.getLogTelParams(combiparam.substring(2).padStart(64, '0')) 
+            if(chain_id != config.eos.id){
+                console.log('Wrong chain id', chain_id)
                 return false
             }
             if (amount == BigInt(0)) {
@@ -183,7 +178,6 @@ class EthOracle {
                 return false
             }
 
-            let chain_id = data[3].toNumber() as number
             return { chain_id, confirmed: true, quantity, to, oracle_name: config.eos.oracleAccount, index: id, ref: txid }
         } else {
             const to = data[0]
@@ -316,7 +310,7 @@ class EthOracle {
             // Send transaction on eosio chain
             const eos_res = await this.sendTransaction(actions, trxBroadcast)
             if(eos_res === false){
-                console.log(`Skip sending claimed of id ${eosioData.id} to the eosio chain ❌`)
+                console.log(`Skip sending claimed of id ${eosioData.id} to eosio chain ❌`)
             } else if(eos_res === true){
                 console.log(`Id ${eosioData.id} is already claimed, account 0x${eosioData.to_eth.substring(0, 40)}, quantity ${eosioData.quantity} ✔️`)
             } else {
@@ -353,10 +347,11 @@ class EthOracle {
                         error = e.message
                     }
                     // Check if the error appears because the transaction is already claimed or approved
-                    if (error.indexOf('Already marked as claimed') > -1 || error.indexOf('Oracle has already approved') > -1 || error.indexOf('This teleport has already completed') > -1) {
+                    if (error.indexOf('Already marked as claimed') > -1 || error.indexOf('Oracle has already approved') > -1 || error.indexOf('already completed') > -1) {
                         return true
                     }
                 }
+                // console.log('---action', actions);
                 
                 console.error(`Error while sending to eosio chain with ${this.eos_api.getEndpoint()}: ${error} ❌`)
                 await this.eos_api.nextEndpoint()
@@ -411,7 +406,7 @@ class EthOracle {
             }
 
             // Set the id as the id of the sender chain
-            if(this.version == 0 && this.config.eth.id !== undefined){
+            if(this.version != 0 || this.config.eth.id !== undefined){
                 eosioData.chain_id = Number(this.config.eth.id)
             }
 
