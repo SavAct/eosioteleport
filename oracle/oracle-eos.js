@@ -1,4 +1,9 @@
 "use strict";
+/*
+    This oracle listens to the EOSIO blockchain for new `Teleport` entries.
+    
+    When a new teleport is added to the EOSIO table, it will call sign the teleport and upload the signature to the EOSIO chain.
+ */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -39,6 +44,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+process.env.NTBA_FIX_319 = '1'; // Needed to disable TelegramBot warning
 var eosjs_1 = require("eosjs");
 var eosjs_jssig_1 = require("eosjs/dist/eosjs-jssig");
 var text_encoding_1 = require("text-encoding");
@@ -46,6 +52,7 @@ var ethereumjs_util_1 = require("ethereumjs-util");
 var EndpointSwitcher_1 = require("./EndpointSwitcher");
 var yargs_1 = __importDefault(require("yargs"));
 var helpers_1 = require("../scripts/helpers");
+var node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
 var EosOracle = /** @class */ (function () {
     function EosOracle(config, signatureProvider, force) {
         this.config = config;
@@ -53,9 +60,58 @@ var EosOracle = /** @class */ (function () {
         this.force = force;
         this.running = false;
         this.irreversible_time = 0;
+        this.telegram = { bot: undefined, statusIds: [], errorIds: [] };
+        this.iniBot();
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: (0, helpers_1.fromHexString)(config.eos.netId.substring(0, 8)) };
     }
+    /**
+     * Initialize the telegram bot
+     */
+    EosOracle.prototype.iniBot = function () {
+        if (this.config.telegram) {
+            if (typeof this.config.telegram.statusIds != 'object') {
+                console.error('Use the telegram id provider to get you personal contactId and store it in the config file');
+                process.exit(1);
+            }
+            else {
+                this.telegram.statusIds = this.config.telegram.statusIds;
+                if (this.config.telegram.errorIds) {
+                    this.telegram.errorIds = this.config.telegram.errorIds;
+                }
+            }
+            this.telegram.bot = new node_telegram_bot_api_1.default(this.config.telegram.privateToken, { polling: false });
+        }
+    };
+    /**
+     * Send a message to a telegram account
+     * @param msg Message
+     */
+    EosOracle.prototype.logViaBot = function (msg, markdown) {
+        if (markdown === void 0) { markdown = false; }
+        console.log(msg);
+        if (this.telegram.bot) {
+            for (var _i = 0, _a = this.telegram.statusIds; _i < _a.length; _i++) {
+                var id = _a[_i];
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
+            }
+        }
+    };
+    /**
+     * Send a message to telegram accounts which is marked for error log
+     * @param msg
+     * @param markdown
+     */
+    EosOracle.prototype.logError = function (msg, markdown) {
+        if (markdown === void 0) { markdown = false; }
+        console.error(msg);
+        if (this.telegram.bot && this.telegram.errorIds.length > 0) {
+            for (var _i = 0, _a = this.telegram.errorIds; _i < _a.length; _i++) {
+                var id = _a[_i];
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
+            }
+        }
+    };
     /**
      * Send sign a teleport. Repeats itself until a defined amount of tries are reached
      * @param id Teleport id
@@ -115,7 +171,7 @@ var EosOracle = /** @class */ (function () {
                         _a.sent();
                         return [3 /*break*/, 6];
                     case 5:
-                        console.error("Teleport id ".concat(id, ", skip sign action. \u274C"));
+                        this.logError("Teleport id ".concat(id, ", skip sign action by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". \u274C"));
                         _a.label = 6;
                     case 6: return [2 /*return*/];
                     case 7:
@@ -274,8 +330,7 @@ var EosOracle = /** @class */ (function () {
                         vData = (_a.sent()).rows;
                         verify_data.push(vData);
                         if (initialEndpoint == this.eos_api.getEndpoint()) {
-                            console.error('No available endpoints for verification. ⛔');
-                            process.exit(1);
+                            throw ('No available endpoints for verification. ⛔');
                         }
                         // Handle only to the lowest amount of entries  
                         if (lowest_amount > vData.length) {
@@ -429,7 +484,7 @@ var EosOracle = /** @class */ (function () {
                             return [3 /*break*/, 8];
                         }
                         if (!!isVerifyed) return [3 /*break*/, 3];
-                        console.error("Teleport id ".concat(item.id, ", skip this one. \u274C"));
+                        this.logError("Teleport id ".concat(item.id, ", skip this one by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". \u274C"));
                         return [3 /*break*/, 6];
                     case 3: return [4 /*yield*/, EosOracle.signTeleport(logData, this.config.eth.privateKey)
                         // Send signature to eosio chain
@@ -526,7 +581,7 @@ var EosOracle = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        console.log("Starting EOS watcher for ETH oracle ".concat(this.config.eth.oracleAccount));
+                        this.logViaBot("Starting *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDEB4\u200D\u2642\uFE0F"), true);
                         // Create an object to change the current id on each run
                         this.running = true;
                         _a.label = 1;
@@ -552,10 +607,10 @@ var EosOracle = /** @class */ (function () {
                     case 7: return [3 /*break*/, 9];
                     case 8:
                         e_4 = _a.sent();
-                        console.error('⚡️ ' + e_4);
+                        this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(e_4));
                         return [3 /*break*/, 9];
                     case 9:
-                        console.log('Thread closed 💀');
+                        this.logViaBot("Thread closed of *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDC80"), true);
                         return [2 /*return*/];
                 }
             });
@@ -601,9 +656,6 @@ var argv = yargs_1.default
 var config_path = argv.config || process.env['CONFIG'] || './config';
 process.title = "oracle-eos ".concat(config_path);
 var configFile = require(config_path);
-// Configure eosjs specific propperties
-var signatureProvider = new eosjs_jssig_1.JsSignatureProvider([configFile.eos.privateKey]);
-var eosOracle = new EosOracle(configFile, signatureProvider, argv.force);
 // Get time to wait for each round by config file or comsole parameters
 var waitCycle = undefined;
 if (typeof configFile.eos.waitCycle == 'number') {
@@ -612,5 +664,8 @@ if (typeof configFile.eos.waitCycle == 'number') {
 if (argv.waiter) {
     waitCycle = argv.waiter;
 }
+// Configure eosjs specific propperties
+var signatureProvider = new eosjs_jssig_1.JsSignatureProvider([configFile.eos.privateKey]);
+var eosOracle = new EosOracle(configFile, signatureProvider, argv.force);
 // Run the process
 eosOracle.run(argv.id, argv.amount, waitCycle);

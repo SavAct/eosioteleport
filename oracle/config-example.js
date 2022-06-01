@@ -34,5 +34,10 @@ module.exports = {
         privateKey: '8940fbd7806ec09af7e1ceaf7ccac80e89eeeb1e85cee42f84c07b1d5a378100', // Example private ETH key. Do not use it. It is public!
         waitCycle: 10,          // Seconds to wait to check for new teleports after all teleports are handled
         blocksToWait: 6,        // Amount of blocks to wait until it will be considered as irreversible. Lowest accepted value is 5
+    },
+    telegram: {                 // Optional parameter to contact telegram accounts on oracle status and errors (It will only send messages, it will not receive any commands via Telegram)
+        privateToken: '4814812745:YourSecretTelegramBotApiToken-927742',  // Your private telegram bot API token got by @BotFather
+        statusIds: [00000000, 00000000],  // IDs of Telegram accounts which will receive a message on starting and ending the thread of the oracle program. You can use telegram-id-provider.js to request your id. 
+        errorIds: [00000000],    // IDs of Telegram accounts which will receive error messages
     }
 }

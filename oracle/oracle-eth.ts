@@ -1,11 +1,11 @@
-#!/usr/bin/env node
-
 /*
-This oracle listens to the ethereum blockchain for `Teleport` events.
+    This oracle listens to the ethereum blockchain for `Teleport` and `Claimed` events.
 
-When an event is received, it will call the `received` action on the EOS chain
+    When an `Teleport` event is received, it will call the `received` action on the EOSIO chain.
+    On receiving a `Claimed` event, it will call the `claimed` action on the EOSIO chain.
  */
 
+process.env.NTBA_FIX_319 = '1' // Needed to disable TelegramBot warning
 import fs from 'fs'
 import { ethers } from 'ethers'
 import yargs from 'yargs'
@@ -13,7 +13,8 @@ import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 import { EosApi, EthApi } from './EndpointSwitcher'
-import {sleep, toHexString, fromHexString, hexToString} from '../scripts/helpers'
+import {sleep, hexToString} from '../scripts/helpers'
+import TelegramBot from 'node-telegram-bot-api'
 
 type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string, id?: number, netId: string}}
 
@@ -65,18 +66,27 @@ class EthOracle {
     private eos_api: EosApi
     private eth_api: EthApi
     private minTrySend = 3
+    private telegram: {
+        bot : TelegramBot | undefined;
+        statusIds : Array<number>;
+        errorIds: Array<number>;
+    }  = {bot: undefined, statusIds: [], errorIds: []}
 
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider){
+        
         // Standardise the net id
         this.config.eos.netId = this.config.eos.netId.toLowerCase()
         if(this.config.eos.netId[1] == 'x'){
             this.config.eos.netId = this.config.eos.netId.substring(2)
         }
-
+        
         // Set further initial data
         this.blocksToWait = typeof config.eth.blocksToWait == 'number' && config.eth.blocksToWait > EthOracle.MIN_BLOCKS_TO_WAIT? config.eth.blocksToWait : EthOracle.MIN_BLOCKS_TO_WAIT
         this.blocks_file_name = `.oracle_${configFile.eth.network}_block-${configFile.eth.oracleAccount}`
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
+        
+        // Initialize the telegram bot
+        this.iniBot()
         
         // Create interfaces for eosio and eth chains
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
@@ -94,6 +104,51 @@ class EthOracle {
             default:
                 this.claimed_logEvent = EthOracle.version_v1.claimed
                 this.teleport_logEvent = EthOracle.version_v1.teleport
+        }
+    }
+
+    /**
+     * Initialize the telegram bot
+     */
+     iniBot(){
+        if(this.config.telegram){
+            if(typeof this.config.telegram.statusIds != 'object'){
+                console.error('Use the telegram id provider to get you personal contactId and store it in the config file')
+                process.exit(1)
+            } else {
+                this.telegram.statusIds = this.config.telegram.statusIds
+                if(this.config.telegram.errorIds){
+                    this.telegram.errorIds = this.config.telegram.errorIds
+                }
+            }
+            this.telegram.bot = new TelegramBot(this.config.telegram.privateToken, {polling: false});
+        }
+    }
+
+    /**
+     * Send a message to a telegram account
+     * @param msg Message
+     */
+    logViaBot(msg: string, markdown: boolean = false) {
+        console.log(msg)
+        if(this.telegram.bot){
+            for (let id of this.telegram.statusIds) {
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+            }
+        }
+    }
+
+    /**
+     * Send a message to telegram accounts which is marked for error log
+     * @param msg 
+     * @param markdown 
+     */
+    logError(msg: string, markdown: boolean = false){
+        console.error(msg)
+        if(this.telegram.bot && this.telegram.errorIds.length > 0){
+            for (let id of this.telegram.errorIds) {
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+            }
         }
     }
 
@@ -292,7 +347,7 @@ class EthOracle {
 
             // Continue this event if it was marked as removed
             if(entry.removed){
-                console.log(`Claimed event with trx hash ${entry.transactionHash} got removed and will be skipped ❌`)
+                this.logError(`Claimed event with trx hash ${entry.transactionHash} got removed and will be skipped by ${this.config.eos.oracleAccount} on ${this.config.eth.network} ❌`)
                 continue
             }
 
@@ -310,7 +365,7 @@ class EthOracle {
             // Send transaction on eosio chain
             const eos_res = await this.sendTransaction(actions, trxBroadcast)
             if(eos_res === false){
-                console.log(`Skip sending claimed of id ${eosioData.id} to eosio chain ❌`)
+                this.logError(`Skip sending claimed of id ${eosioData.id} to eosio chain by ${this.config.eos.oracleAccount} from ${this.config.eth.network} ❌`)
             } else if(eos_res === true){
                 console.log(`Id ${eosioData.id} is already claimed, account 0x${eosioData.to_eth.substring(0, 40)}, quantity ${eosioData.quantity} ✔️`)
             } else {
@@ -483,12 +538,13 @@ class EthOracle {
      * @param trxBroadcast False if transactions should not be broadcasted (not submitted to the block chain)
      */
     async run(start_ref: 'latest' | number, trxBroadcast: boolean = true, waitCycle = 30){
+        this.logViaBot(`Starting *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 🚴‍♂️`, true)
         let from_block: number | undefined
         this.running = true
         try{
             await this.eth_api.nextEndpoint()
             await this.eos_api.nextEndpoint()
-        
+            let tries = 0
             while (this.running) {
                 try {
                     // Get latest block from chain
@@ -548,20 +604,25 @@ class EthOracle {
                     } else {
                         console.log(`Latest block is ${latest_block}. Not waiting...`)
                     }
+                    tries = 0
                 } catch (e: any) {
                     console.error('⚡️ ' + e.message)
-
-                    console.error('Try again in 5 seconds')
-                    await sleep(5000)
+                    tries++
+                    if(tries < 12){
+                        console.error('Try again in 5 seconds')
+                        await sleep(5000)
+                    } else {
+                        throw(e.message)
+                    }
                 }
 
                 // Select the next endpoint to distribute the requests
                 await this.eos_api.nextEndpoint()
             }
         } catch(e){
-            console.error('⚡️ ' + e)
+            this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network}. ${e}`)
         }
-        console.log('Thread closed 💀');
+        this.logViaBot(`Thread closed of *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 💀`, true)
     }
 
     /**

@@ -1,9 +1,9 @@
-#!/usr/bin/env node
 "use strict";
 /*
-This oracle listens to the ethereum blockchain for `Teleport` events.
+    This oracle listens to the ethereum blockchain for `Teleport` and `Claimed` events.
 
-When an event is received, it will call the `received` action on the EOS chain
+    When an `Teleport` event is received, it will call the `received` action on the EOSIO chain.
+    On receiving a `Claimed` event, it will call the `claimed` action on the EOSIO chain.
  */
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -52,12 +52,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+process.env.NTBA_FIX_319 = '1'; // Needed to disable TelegramBot warning
 var fs_1 = __importDefault(require("fs"));
 var ethers_1 = require("ethers");
 var yargs_1 = __importDefault(require("yargs"));
 var eosjs_jssig_1 = require("eosjs/dist/eosjs-jssig");
 var EndpointSwitcher_1 = require("./EndpointSwitcher");
 var helpers_1 = require("../scripts/helpers");
+var node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
 function amountToAsset(amount, symbol_name, precision) {
     var s = amount.toString().padStart(precision, '0');
     var p = s.length - precision;
@@ -70,6 +72,7 @@ var EthOracle = /** @class */ (function () {
         this.signatureProvider = signatureProvider;
         this.running = false;
         this.minTrySend = 3;
+        this.telegram = { bot: undefined, statusIds: [], errorIds: [] };
         // Standardise the net id
         this.config.eos.netId = this.config.eos.netId.toLowerCase();
         if (this.config.eos.netId[1] == 'x') {
@@ -79,6 +82,8 @@ var EthOracle = /** @class */ (function () {
         this.blocksToWait = typeof config.eth.blocksToWait == 'number' && config.eth.blocksToWait > EthOracle.MIN_BLOCKS_TO_WAIT ? config.eth.blocksToWait : EthOracle.MIN_BLOCKS_TO_WAIT;
         this.blocks_file_name = ".oracle_".concat(configFile.eth.network, "_block-").concat(configFile.eth.oracleAccount);
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length);
+        // Initialize the telegram bot
+        this.iniBot();
         // Create interfaces for eosio and eth chains
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eth_api = new EndpointSwitcher_1.EthApi(this.config.eth.netId, this.config.eth.endpoints);
@@ -97,6 +102,53 @@ var EthOracle = /** @class */ (function () {
                 this.teleport_logEvent = EthOracle.version_v1.teleport;
         }
     }
+    /**
+     * Initialize the telegram bot
+     */
+    EthOracle.prototype.iniBot = function () {
+        if (this.config.telegram) {
+            if (typeof this.config.telegram.statusIds != 'object') {
+                console.error('Use the telegram id provider to get you personal contactId and store it in the config file');
+                process.exit(1);
+            }
+            else {
+                this.telegram.statusIds = this.config.telegram.statusIds;
+                if (this.config.telegram.errorIds) {
+                    this.telegram.errorIds = this.config.telegram.errorIds;
+                }
+            }
+            this.telegram.bot = new node_telegram_bot_api_1.default(this.config.telegram.privateToken, { polling: false });
+        }
+    };
+    /**
+     * Send a message to a telegram account
+     * @param msg Message
+     */
+    EthOracle.prototype.logViaBot = function (msg, markdown) {
+        if (markdown === void 0) { markdown = false; }
+        console.log(msg);
+        if (this.telegram.bot) {
+            for (var _i = 0, _a = this.telegram.statusIds; _i < _a.length; _i++) {
+                var id = _a[_i];
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
+            }
+        }
+    };
+    /**
+     * Send a message to telegram accounts which is marked for error log
+     * @param msg
+     * @param markdown
+     */
+    EthOracle.prototype.logError = function (msg, markdown) {
+        if (markdown === void 0) { markdown = false; }
+        console.error(msg);
+        if (this.telegram.bot && this.telegram.errorIds.length > 0) {
+            for (var _i = 0, _a = this.telegram.errorIds; _i < _a.length; _i++) {
+                var id = _a[_i];
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
+            }
+        }
+    };
     /**
      * Get object of the data of an "claimed"-event on eth chain
      * @param data "claimed"-event data
@@ -320,7 +372,7 @@ var EthOracle = /** @class */ (function () {
                         }
                         // Continue this event if it was marked as removed
                         if (entry.removed) {
-                            console.log("Claimed event with trx hash ".concat(entry.transactionHash, " got removed and will be skipped \u274C"));
+                            this.logError("Claimed event with trx hash ".concat(entry.transactionHash, " got removed and will be skipped by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, " \u274C"));
                             return [3 /*break*/, 7];
                         }
                         actions = [{
@@ -336,7 +388,7 @@ var EthOracle = /** @class */ (function () {
                     case 6:
                         eos_res = _b.sent();
                         if (eos_res === false) {
-                            console.log("Skip sending claimed of id ".concat(eosioData.id, " to eosio chain \u274C"));
+                            this.logError("Skip sending claimed of id ".concat(eosioData.id, " to eosio chain by ").concat(this.config.eos.oracleAccount, " from ").concat(this.config.eth.network, " \u274C"));
                         }
                         else if (eos_res === true) {
                             console.log("Id ".concat(eosioData.id, " is already claimed, account 0x").concat(eosioData.to_eth.substring(0, 40), ", quantity ").concat(eosioData.quantity, " \u2714\uFE0F"));
@@ -610,26 +662,28 @@ var EthOracle = /** @class */ (function () {
         if (trxBroadcast === void 0) { trxBroadcast = true; }
         if (waitCycle === void 0) { waitCycle = 30; }
         return __awaiter(this, void 0, void 0, function () {
-            var from_block, latest_block, err_1, to_block, e_6, e_7;
+            var from_block, tries, latest_block, err_1, to_block, e_6, e_7;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
+                        this.logViaBot("Starting *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDEB4\u200D\u2642\uFE0F"), true);
                         this.running = true;
                         _a.label = 1;
                     case 1:
-                        _a.trys.push([1, 27, , 28]);
+                        _a.trys.push([1, 29, , 30]);
                         return [4 /*yield*/, this.eth_api.nextEndpoint()];
                     case 2:
                         _a.sent();
                         return [4 /*yield*/, this.eos_api.nextEndpoint()];
                     case 3:
                         _a.sent();
+                        tries = 0;
                         _a.label = 4;
                     case 4:
-                        if (!this.running) return [3 /*break*/, 26];
+                        if (!this.running) return [3 /*break*/, 28];
                         _a.label = 5;
                     case 5:
-                        _a.trys.push([5, 22, , 24]);
+                        _a.trys.push([5, 22, , 26]);
                         return [4 /*yield*/, this.getLatestBlock()];
                     case 6:
                         latest_block = _a.sent();
@@ -708,29 +762,35 @@ var EthOracle = /** @class */ (function () {
                     case 20:
                         console.log("Latest block is ".concat(latest_block, ". Not waiting..."));
                         _a.label = 21;
-                    case 21: return [3 /*break*/, 24];
+                    case 21:
+                        tries = 0;
+                        return [3 /*break*/, 26];
                     case 22:
                         e_6 = _a.sent();
                         console.error('⚡️ ' + e_6.message);
+                        tries++;
+                        if (!(tries < 12)) return [3 /*break*/, 24];
                         console.error('Try again in 5 seconds');
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 23:
                         _a.sent();
-                        return [3 /*break*/, 24];
-                    case 24: 
+                        return [3 /*break*/, 25];
+                    case 24: throw (e_6.message);
+                    case 25: return [3 /*break*/, 26];
+                    case 26: 
                     // Select the next endpoint to distribute the requests
                     return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 25:
+                    case 27:
                         // Select the next endpoint to distribute the requests
                         _a.sent();
                         return [3 /*break*/, 4];
-                    case 26: return [3 /*break*/, 28];
-                    case 27:
+                    case 28: return [3 /*break*/, 30];
+                    case 29:
                         e_7 = _a.sent();
-                        console.error('⚡️ ' + e_7);
-                        return [3 /*break*/, 28];
-                    case 28:
-                        console.log('Thread closed 💀');
+                        this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(e_7));
+                        return [3 /*break*/, 30];
+                    case 30:
+                        this.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true);
                         return [2 /*return*/];
                 }
             });

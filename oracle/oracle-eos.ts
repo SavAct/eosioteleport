@@ -1,3 +1,10 @@
+/*
+    This oracle listens to the EOSIO blockchain for new `Teleport` entries.
+    
+    When a new teleport is added to the EOSIO table, it will call sign the teleport and upload the signature to the EOSIO chain.
+ */
+
+process.env.NTBA_FIX_319 = '1' // Needed to disable TelegramBot warning
 import { RpcError, Serialize } from "eosjs"
 import { GetTableRowsResult } from 'eosjs/dist/eosjs-rpc-interfaces'
 import { JsSignatureProvider } from "eosjs/dist/eosjs-jssig"
@@ -7,6 +14,7 @@ import { EosApi } from './EndpointSwitcher'
 import { ConfigType, TeleportTableEntry } from './CommonTypes'
 import yargs from 'yargs'
 import {sleep, toHexString, fromHexString} from '../scripts/helpers'
+import TelegramBot from "node-telegram-bot-api"
 
 // /**
 //  * Check if two Uint8Arrays are equal
@@ -36,10 +44,62 @@ class EosOracle {
     public running = false
     private irreversible_time = 0
     static maxWait = 180    // The max amount of seconds to wait to check an entry again if it is irreversible now
+    
+    private telegram: {
+        bot : TelegramBot | undefined;
+        statusIds : Array<number>;
+        errorIds: Array<number>;
+    }  = {bot: undefined, statusIds: [], errorIds: []}
 
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider, private force: boolean){
+        this.iniBot()
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.eosio_data = {tel_contract: config.eos.teleportContract, short_net_id: fromHexString(config.eos.netId.substring(0, 8))}
+    }
+
+    /**
+     * Initialize the telegram bot
+     */
+    iniBot(){
+        if(this.config.telegram){
+            if(typeof this.config.telegram.statusIds != 'object'){
+                console.error('Use the telegram id provider to get you personal contactId and store it in the config file')
+                process.exit(1)
+            } else {
+                this.telegram.statusIds = this.config.telegram.statusIds
+                if(this.config.telegram.errorIds){
+                    this.telegram.errorIds = this.config.telegram.errorIds
+                }
+            }
+            this.telegram.bot = new TelegramBot(this.config.telegram.privateToken, {polling: false});
+        }
+    }
+
+    /**
+     * Send a message to a telegram account
+     * @param msg Message
+     */
+    logViaBot(msg: string, markdown: boolean = false) {
+        console.log(msg)
+        if(this.telegram.bot){
+            for (let id of this.telegram.statusIds) {
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+            }
+        }
+    }
+
+    /**
+     * Send a message to telegram accounts which is marked for error log
+     * @param msg 
+     * @param markdown 
+     */
+    logError(msg: string, markdown: boolean = false){
+        console.error(msg)
+        if(this.telegram.bot && this.telegram.errorIds.length > 0){
+            for (let id of this.telegram.errorIds) {
+                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+            }
+        }
     }
 
     /**
@@ -86,7 +146,7 @@ class EosOracle {
                 await this.eos_api.nextEndpoint()
                 await this.sendSignAction(id, signature, tries)
             } else {
-                console.error(`Teleport id ${id}, skip sign action. ❌`)
+                this.logError(`Teleport id ${id}, skip sign action by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ❌`)
             }
             return
         }
@@ -215,8 +275,7 @@ class EosOracle {
                 const vData = (await this.getTableRows(request.lowerId, request.amount, false) as GetTableRowsResult).rows as Array<string>
                 verify_data.push(vData)
                 if(initialEndpoint == this.eos_api.getEndpoint()){
-                    console.error('No available endpoints for verification. ⛔')
-                    process.exit(1)
+                    throw('No available endpoints for verification. ⛔')
                 }
                 // Handle only to the lowest amount of entries  
                 if(lowest_amount > vData.length){
@@ -352,7 +411,7 @@ class EosOracle {
             }
 
             if(!isVerifyed){
-                console.error(`Teleport id ${item.id}, skip this one. ❌`)
+                this.logError(`Teleport id ${item.id}, skip this one by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ❌`)
             } else {
                 // Sign the serialized teleport
                 const signature = await EosOracle.signTeleport(logData, this.config.eth.privateKey)
@@ -404,8 +463,8 @@ class EosOracle {
      * @param requestAmount Amount of requested teleports per request
      */
     async run(id = 0, requestAmount = 100, waitCycle = EosOracle.maxWait){
-        console.log(`Starting EOS watcher for ETH oracle ${this.config.eth.oracleAccount}`)
-        
+        this.logViaBot(`Starting *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 🚴‍♂️`, true)
+
         // Create an object to change the current id on each run
         this.running = true
         try{
@@ -417,9 +476,9 @@ class EosOracle {
                 await EosOracle.WaitWithAnimation(waitCycle, 'All available teleports signed')
             }
         } catch (e){
-            console.error('⚡️ ' + e)
+            this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ${e}`)
         }
-        console.log('Thread closed 💀')
+        this.logViaBot(`Thread closed of *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 💀`, true)
     }
 }
 
@@ -469,10 +528,6 @@ const config_path = argv.config || process.env['CONFIG'] || './config'
 process.title = `oracle-eos ${config_path}`
 const configFile : ConfigType = require(config_path)
 
-// Configure eosjs specific propperties
-const signatureProvider = new JsSignatureProvider([configFile.eos.privateKey])
-const eosOracle = new EosOracle(configFile, signatureProvider, argv.force)
-
 // Get time to wait for each round by config file or comsole parameters
 let waitCycle : undefined | number = undefined
 if(typeof configFile.eos.waitCycle == 'number'){
@@ -482,5 +537,10 @@ if(argv.waiter) {
     waitCycle = argv.waiter 
 }
 
+// Configure eosjs specific propperties
+const signatureProvider = new JsSignatureProvider([configFile.eos.privateKey])
+const eosOracle = new EosOracle(configFile, signatureProvider, argv.force)
+
 // Run the process
 eosOracle.run(argv.id, argv.amount, waitCycle)
+

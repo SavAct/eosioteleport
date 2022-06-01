@@ -15,7 +15,7 @@ export interface ConfigType {
         oraclePermission?: string,
         epVerifications: number,
         waitCycle: number,
-    }
+    },
     eth: {
         network: string,
         netId?: string,
@@ -29,6 +29,11 @@ export interface ConfigType {
         epVerifications: number,
         waitCycle?: number,
         blocksToWait?: number,
+    },
+    telegram?: {
+        privateToken: string,
+        statusIds?: Array<number>,
+        errorIds?: Array<number>,
     }
 }
 
