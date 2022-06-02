@@ -11,9 +11,10 @@ This version reduces the EOSIO RAM by half and therefore its running costs. Furt
 
 # Deployment and initialization
 
-0. The EOSIO account of the contract needs the `eosio.code` permission activated.
-1. Deploy the contract
-2. Run the ini action of the contract with the following parameters
+0. The EOSIO account of the contract needs the `eosio.code` permission activated
+1. Replace the value of `TOKEN_CONTRACT_STR` and `TOKEN_SYMBOL` in the `teleporteos.hpp` file with your token specific data
+2. Deploy the contract
+3. Run the ini action of the contract with the following parameters
 ```
 ACTION ini(asset min, uint64_t fixfee, double varfee, bool freeze, uint32_t threshold);
 ```
@@ -23,14 +24,14 @@ ACTION ini(asset min, uint64_t fixfee, double varfee, bool freeze, uint32_t thre
 - ***freeze*** True to freeze the contract until you unfreeze it with the freeze action.
 - ***threshold*** Amount of needed oracle confirmations for a receiving teleport
 
-3. Add the allowed ethereum chains 
+4. Add the allowed Ethereum chains 
 ```
   ACTION addchain(string name, uint8_t chain_id, string teleaddr, string tokenaddr, uint64_t completed_index);
 ```
 - ***name*** Name of the chain to bridge
 - ***abbreviation*** Short name of the chain (like ETH or BSC)
 - ***chain_id*** Identification number for this new chain (have to match the self given chain id of that contract)
-- ***net_id*** Unique network id to distinguish different chains. See "ChainID" for ethereum based chains on https://chainlist.org/ 
+- ***net_id*** Unique network id to distinguish different chains. See "ChainID" for Ethereum based chains on https://chainlist.org/ 
 - ***teleaddr*** Teleport contract address
 - ***tokenaddr*** Token contract address (may be the same as ***teleaddr***)
  * ***completed_index*** Current index of received teleports from this chain (Should be zero if there are no transactions on that contract to this contract account)
@@ -90,7 +91,7 @@ dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /nores
 wsl --set-default-version 2
 ```
 
-## Set up Linux environment
+## Setup Linux environment
 Install Debian from Microsoft store, start it, create your user account and run the following commands
 ```
 sudo apt-get update

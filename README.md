@@ -2,7 +2,19 @@
 
 Contracts and tools to create a bridge between EOSIO tokens and ERC-20 counterparts.
 
-## Note - Work in progress
-
-The fork of [Kevin Tuncer](https://github.com/KevinTuncer/alienteleport) is called version 1 and created to add new features by being backwards compatible to the origin [Alien Worlds](https://github.com/Alien-Worlds/alienteleport) teleport. The biggest advantage is the option to clear completed EOSIO -> ETH teleports, that reduces the continual EOSIO RAM consumption by 50 %. Breaking changes are needed to remove the continual EOSIO RAM consumption completely, without losing consensus. This and some other features are in progress on this fork, which will be called version 2.
+## Versions
 The version numbers are necessary to make all teleports compatible with custom frontends.
+This project is called version 2 and is a fork of [Kevin Tuncer](https://github.com/KevinTuncer/alienteleport), which is called version 1.
+Itself is a fork of the origin [Alien Worlds](https://github.com/Alien-Worlds/alienteleport) teleport, which is seen as version 0. Each fork brings up a lot of new features and reduces the running costs.
+
+## Setup
+See the `md-file` of each component for more informations.
+1. Setup the [EOSIO contract](./contracts/teleporteos/README.md) and deploy it on the EOSIO chain of your choice, like EOS, WAX, ect
+2. Setup the [ETH contract](./contracts/teleporteth/README.md) and deploy it on all Ethereum based chains of your choice
+3. Configure all [oracles](./oracles/README.md)
+4. Setup the contracts oracles on each chain, register the EOSIO chain on each Ethereum based chain and all Ethereum based chains on the EOSIO chain
+5. Start the eth and eosio oracles   
+
+## Custom front end
+Provide your own front end for your users or use the [SavAct App](https://savact.app/#/_trx_/teleport). Select your bridge by replacing the query values of bridge and eosio. The `bridge` value is the EOSIO contract account name of the teleport and the `eosio` value is the abbreviation or EOSIO chain id of the EOSIO chain
+https://savact.app/#/_trx_/teleport?`bridge`=***other.worlds***&`eosio`=***WAX***

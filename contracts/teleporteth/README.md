@@ -9,7 +9,8 @@ yarn install
 ```
 
 ### Configutration
-Use truffle-config.js file to change your test net settings.
+1. Replace the values of `symbol`, `name`, `decimals` and `_totalSupply` in the constructor of the `TeleportToken.sol` file 
+2. Use truffle-config.js file to change your test net settings
 
 ### Run eth contract tests
 1. Start two consoles
