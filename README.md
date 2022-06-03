@@ -5,7 +5,15 @@ Contracts and tools to create a bridge between EOSIO tokens and ERC-20 counterpa
 ## Versions
 The version numbers are necessary to make all teleports compatible with custom frontends.
 This project is called version 2 and is a fork of [Kevin Tuncer](https://github.com/KevinTuncer/alienteleport), which is called version 1.
-Itself is a fork of the origin [Alien Worlds](https://github.com/Alien-Worlds/alienteleport) teleport, which is seen as version 0. Each fork brings up a lot of new features and reduces the running costs.
+Itself is a backwards compatible fork of the origin [Alien Worlds](https://github.com/Alien-Worlds/alienteleport) teleport, which is seen as version 0. Each fork brings up a lot of new features and reduces the running costs.
+
+### Features of version 2
+- No continues EOSIO RAM consumption anymore, due to deletion of old entries without loss of consensus
+- Minimum amount for ETH to EOSIO teleports
+- Add and remove chains on ETH contracts
+- Compile more information and use less space in ETH event logs
+- Also secure when the same oracles serve more than one bridge
+- Inform Telegram contacts about oracle status and errors
 
 ## Setup
 See the `md-file` of each component for more informations.

@@ -250,12 +250,19 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     }
     
     // ------------------------------------------------------------------------
-    // Total supply
+    // Total supply is a number of tokens that currently exists and are either in circulation or locked somehow
     // ------------------------------------------------------------------------
     function totalSupply() override public view returns (uint) {
-        return _totalSupply - balances[address(0)];
+        return _totalSupply;
     }
 
+    
+    // ------------------------------------------------------------------------
+    // Amount of tokens which are currently in circulation of this chain
+    // ------------------------------------------------------------------------
+    function chainSupply() public view returns (uint) {
+        return _totalSupply - balances[address(0)];
+    }
 
     // ------------------------------------------------------------------------
     // Get the token balance for account `tokenOwner`
