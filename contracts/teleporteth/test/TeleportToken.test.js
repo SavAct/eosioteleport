@@ -266,10 +266,10 @@ contract('TeleportToken', (accounts) => {
         const sig = signWithKey(TestSettings.oracles[i].keys.ethPrivate, ethUtil.keccak(Buffer(['1', '2', '3', '4'])))
         falseSignatures.push(sig);
       }
-      await catchRevert(instance.claim.call(logDataHex, falseSignatures, {from: accounts[1]}), 'Claim with false signatures')
+      await catchRevert(instance.claim(logDataHex, falseSignatures, {from: accounts[1]}), 'Claim with false signatures')
     });
     it('should fail to receive teleport with inactive chain', async () => {   
-      await catchRevert(instance.claim.call(logDataHex2, signatures2, {from: accounts[2]}), 'Claim with inactive chain')
+      await catchRevert(instance.claim(logDataHex2, signatures2, {from: accounts[2]}), 'Claim with inactive chain')
     });    
     it('should succeed to claim a teleport', async () => {
       await instance.claim(logDataHex, signatures, {from: accounts[2]});  // Claim by a different account is allowed
@@ -478,6 +478,50 @@ contract('TeleportToken', (accounts) => {
       assert.equal((await instance.balanceOf.call(accounts[1])).valueOf(), BigInt(tokenAmount1), 'Balance of account got not reduced')
     })
   })
+  describe("Update threshold", function () {
+    it('should fail with unaothorized account', async () => {
+      await catchRevert(instance.updateThreshold(2, {from: accounts[3]}), "Unauthorized update")
+    })
+    it('should succeed to lower the threshold', async () => {
+      await instance.updateThreshold(2, {from: accounts[0]});
+      assert.equal(Number((await instance.threshold.call()).valueOf()).valueOf(), 2, 'Threshold is not updated')
+    })
+    it('should fail with same value', async () => {
+      await catchRevert(instance.updateThreshold(2, {from: accounts[0]}), "Update to the same value")
+    })
+    it('should fail to use values over 10', async () => {
+      await catchRevert(instance.updateThreshold(11, {from: accounts[0]}), "Update a value over 10")
+    })
+    it('should fail to use too low values', async () => {
+      await catchRevert(instance.updateThreshold(0, {from: accounts[0]}), "Update a value lower than 1")
+    })
+    it('should succeed to make the threshold higher', async () => {
+      await instance.updateThreshold(4, {from: accounts[0]});
+      assert.equal(Number((await instance.threshold.call()).valueOf()), 4, 'Threshold is not updated')
+    })
+  })
+  describe("Update chain id", function () {
+    it('should fail with unaothorized account', async () => {
+      await catchRevert(instance.updateChainId(3, {from: accounts[3]}), "Unauthorized update")
+    })
+    it('should succeed to lower the chain id', async () => {
+      await instance.updateChainId(1, {from: accounts[0]});
+      assert.equal(Number((await instance.thisChainId.call()).valueOf()).valueOf(), 1, 'Chain id is not updated')
+    })
+    it('should fail with same value', async () => {
+      await catchRevert(instance.updateChainId(1, {from: accounts[0]}), "Update to the same value")
+    })
+    it('should fail to use values over 255', async () => {
+      await catchRevert(instance.updateChainId(255, {from: accounts[0]}), "Update a value over 255")
+    })
+    it('should fail to use too low values', async () => {
+      await catchRevert(instance.updateChainId(0, {from: accounts[0]}), "Update a value lower than 1")
+    })
+    it('should succeed to make the chain id higher', async () => {
+      await instance.updateChainId(2, {from: accounts[0]});
+      assert.equal(Number((await instance.thisChainId.call()).valueOf()), 2, 'Threshold is not updated')
+    })
+  })
   describe("Transfer ownership", function () {
     let owner;
     let newOwner;
@@ -488,25 +532,25 @@ contract('TeleportToken', (accounts) => {
       assert.equal(owner, accounts[0], 'NewOwner is at the beginning not account 0')
     })
     it('should fail with unaothorized account', async () => {
-      await catchRevert(instance.transferOwnership.call(accounts[5], {from: accounts[3]}), "Unauthorized transferOwnership")
+      await catchRevert(instance.transferOwnership(accounts[5], {from: accounts[3]}), "Unauthorized transferOwnership")
     })
     it('should succeed to set new ownership', async () => {
-      await instance.transferOwnership(accounts[5], {from:accounts[0]});
-      owner = await instance.owner();
-      newOwner = await instance.newOwner();
+      await instance.transferOwnership(accounts[5], {from: accounts[0]});
+      owner = await instance.owner.call();
+      newOwner = await instance.newOwner.call();
       assert.equal(owner, accounts[0], 'TransferOwnership but owner should still be account 0')
       assert.equal(newOwner, accounts[5], 'TransferOwnership but new owner is not account 5')
     })
     it('should fail to accept ownership by unaothorized accounts', async () => {
-      await catchRevert(instance.acceptOwnership.call({from: accounts[3]}), "Unauthorized acceptOwnership")
-      await catchRevert(instance.acceptOwnership.call({from: accounts[0]}), "Unauthorized acceptOwnership by old owner")
+      await catchRevert(instance.acceptOwnership({from: accounts[3]}), "Unauthorized acceptOwnership")
+      await catchRevert(instance.acceptOwnership({from: accounts[0]}), "Unauthorized acceptOwnership by old owner")
     })
     it('should succeed to accept ownership', async () => {
-      await instance.acceptOwnership.call({from: accounts[5]})
-      owner = await instance.owner();
-      newOwner = await instance.newOwner();
-      assert.equal(owner, accounts[0], 'AcceptOwnership the new owner is not account 5')
-      assert.equal(newOwner, accounts[5], 'AcceptOwnership the newOwner variable must be account 5, too')
+      await instance.acceptOwnership({from: accounts[5]})
+      owner = await instance.owner.call();
+      newOwner = await instance.newOwner.call();
+      assert.equal(owner, accounts[5], 'AcceptOwnership the new owner is not account 5')
+      assert.equal(newOwner, '0x0000000000000000000000000000000000000000', 'The newOwner variable must be setted to 0x00 address')
     })
   })
 });

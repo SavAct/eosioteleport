@@ -1,4 +1,4 @@
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.14;
 /*
  * SPDX-License-Identifier: MIT
  */
@@ -486,27 +486,22 @@ contract TeleportToken is ERC20Interface, Owned, Oracled, Verify {
     }
 
     function updateThreshold(uint8 newThreshold) public onlyOwner returns (bool success) {
-        if (newThreshold > 0){
-            require(newThreshold <= 10, "Maximum threshold is 10");
-            require(newThreshold == threshold, "No new value for threshold");
+        require(newThreshold > 0, "Minimum threshold is 1");
+        require(newThreshold <= 10, "Maximum threshold is 10");
+        require(newThreshold != threshold, "No new value for threshold");
 
-            threshold = newThreshold;
+        threshold = newThreshold;
 
-            return true;
-        }
-
-        return false;
+        return true;
     }
 
     function updateChainId(uint8 newChainId) public onlyOwner returns (bool success) {
-        if (newChainId > 0){
-            require(newChainId <= 255, "Chain id is too big");
-            thisChainId = newChainId;
+        require(newChainId > 0, "Chain id is too low");
+        require(newChainId < 255, "Chain id is too big");
+        require(newChainId != thisChainId, "No new value for chain id");
+        thisChainId = newChainId;
 
-            return true;
-        }
-
-        return false;
+        return true;
     }
 
     function setMin(uint min) public onlyOwner returns (bool success) {

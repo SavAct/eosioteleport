@@ -17,11 +17,11 @@ Itself is a backwards compatible fork of the origin [Alien Worlds](https://githu
 
 ## Setup
 See the `md-file` of each component for more informations.
-1. Setup the [EOSIO contract](./contracts/teleporteos/README.md) and deploy it on the EOSIO chain of your choice, like EOS, WAX, ect
+1. Setup the [EOSIO contract](./contracts/teleporteos/README.md) and deploy it on the EOSIO chain of your choice, like EOS, WAX, ect.
 2. Setup the [ETH contract](./contracts/teleporteth/README.md) and deploy it on all Ethereum based chains of your choice
 3. Configure all [oracles](./oracles/README.md)
-4. Setup the contracts oracles on each chain, register the EOSIO chain on each Ethereum based chain and all Ethereum based chains on the EOSIO chain
-5. Start the eth and eosio oracles   
+4. Initialize all deployed contracts, register the EOSIO chain on each Ethereum based chain and vice versa
+5. Start the ETH and EOSIO oracles   
 
 ## Custom front end
 Provide your own front end for your users or use the [SavAct App](https://savact.app/#/_trx_/teleport). Select your bridge by replacing the query values of bridge and eosio. The `bridge` value is the EOSIO contract account name of the teleport and the `eosio` value is the abbreviation or EOSIO chain id of the EOSIO chain

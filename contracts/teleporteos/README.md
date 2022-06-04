@@ -1,13 +1,8 @@
-# New features
-- Optional fix and variable fees which fund the oracles
-- Freeze options for specific parts of the contract
-- Adjustable number of needed oracle confirmations for a receiving teleport
-- Adjustable minimum amount for deposits and teleports 
-- Option to delete old teleport and cancel entries without losing consensus 
-- Store all needed bridge data in stats table for interoperability with custom front end apps
-
-# Note
-This version reduces the EOSIO RAM by half and therefore its running costs. Further reductions need breaking changes, therefore a second version will be provided by [SavAct](https://github.com/SavAct).
+# Compilation
+Install EOSIO environment and run the following command in the contract folder
+```
+sudo eosio-cpp -abigen -o teleporteos.wasm teleporteos.cpp
+```
 
 # Deployment and initialization
 
@@ -51,11 +46,7 @@ Register oracles with regoracle
 ACTION regoracle(name oracle_name);
 ```
 
-## Upgrade from running teleport contract of alien world
-
-Just deploy the contract over the old teleport contract account, run the ini action and add all connected chains by executing the addchain action.
-
-**Note:** Additional tables are included in this upgrade, the structure of the old tables is not changed.
+**Note:** This version 2 has breaking changes. You need to clear status and teleport tables before upgrading your version 1 contract. It is also not compatible to the old ETH token contract.
 
 ## Maintenance
 

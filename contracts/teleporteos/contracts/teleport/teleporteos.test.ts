@@ -720,13 +720,13 @@ describe('teleporteos', async () => {
       context('with wrong variable fee', async () => {
         it('should fail f2', async () => {
           await assertEOSErrorIncludesMessage(
-            teleporteos.setfee(`0.0000 ${token_symbol}`, '-0.01', { from: teleporteos.account }),
+            teleporteos.setfee(`0.0100 ${token_symbol}`, '-0.01', { from: teleporteos.account }),
             'Variable fee has to be between 0 and 0.20'
           )
         })
         it('should fail f3', async () => {
           await assertEOSErrorIncludesMessage(
-            teleporteos.setfee(`0.0000 ${token_symbol}`, '1', { from: teleporteos.account }),
+            teleporteos.setfee(`0.0100 ${token_symbol}`, '1', { from: teleporteos.account }),
             'Variable fee has to be between 0 and 0.20'
           )
         })     
@@ -1220,14 +1220,6 @@ async function updateAuths() {
       [{ key: teleporteos.account.publicKey!, weight: 1 }]
     )
   )
-
-  // await UpdateAuth.execLinkAuth(
-  //   landholders.account.active,
-  //   landholders.account.name,
-  //   eosioToken.account.name,
-  //   'transfer',
-  //   'distribpay'
-  // )
 }
 
 async function issueTokens() {
