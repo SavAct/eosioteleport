@@ -89,13 +89,29 @@ var EosOracle = /** @class */ (function () {
      */
     EosOracle.prototype.logViaBot = function (msg, markdown) {
         if (markdown === void 0) { markdown = false; }
-        console.log(msg);
-        if (this.telegram.bot) {
-            for (var _i = 0, _a = this.telegram.statusIds; _i < _a.length; _i++) {
-                var id = _a[_i];
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
-            }
-        }
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, id;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        console.log(msg);
+                        if (!this.telegram.bot) return [3 /*break*/, 4];
+                        _i = 0, _a = this.telegram.statusIds;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 4];
+                        id = _a[_i];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                    case 2:
+                        _b.sent();
+                        _b.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
     };
     /**
      * Send a message to telegram accounts which is marked for error log
@@ -104,13 +120,29 @@ var EosOracle = /** @class */ (function () {
      */
     EosOracle.prototype.logError = function (msg, markdown) {
         if (markdown === void 0) { markdown = false; }
-        console.error(msg);
-        if (this.telegram.bot && this.telegram.errorIds.length > 0) {
-            for (var _i = 0, _a = this.telegram.errorIds; _i < _a.length; _i++) {
-                var id = _a[_i];
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
-            }
-        }
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, id;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        console.error(msg);
+                        if (!(this.telegram.bot && this.telegram.errorIds.length > 0)) return [3 /*break*/, 4];
+                        _i = 0, _a = this.telegram.errorIds;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 4];
+                        id = _a[_i];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                    case 2:
+                        _b.sent();
+                        _b.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
     };
     /**
      * Send sign a teleport. Repeats itself until a defined amount of tries are reached
@@ -513,7 +545,7 @@ var EosOracle = /** @class */ (function () {
                             waitForIrr = EosOracle.maxWait;
                         }
                         console.log("Wait ".concat(waitForIrr, " seconds until teleport id ").concat(signProcessData.lowerId, " is irreversible."));
-                        return [4 /*yield*/, EosOracle.WaitWithAnimation(waitForIrr)];
+                        return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitForIrr)];
                     case 9:
                         _b.sent();
                         return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
@@ -535,39 +567,6 @@ var EosOracle = /** @class */ (function () {
         });
     };
     /**
-     * Wait for a defined amount of time and show remaining seconds
-     * @param s Seconds to wait
-     */
-    EosOracle.WaitWithAnimation = function (s, info) {
-        if (info === void 0) { info = ""; }
-        return __awaiter(this, void 0, void 0, function () {
-            var i;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        process.stdout.write(info + "\n\x1b[?25l");
-                        i = 0;
-                        _a.label = 1;
-                    case 1:
-                        if (!(i < s)) return [3 /*break*/, 4];
-                        process.stdout.write("\uD83D\uDCA4 ".concat(i, " s / ").concat(s, " s \uD83D\uDCA4"));
-                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
-                    case 2:
-                        _a.sent();
-                        process.stdout.write("\r\x1b[K");
-                        _a.label = 3;
-                    case 3:
-                        i++;
-                        return [3 /*break*/, 1];
-                    case 4:
-                        process.stdout.moveCursor(0, -1); // up one line
-                        process.stdout.clearLine(1); // from cursor to end
-                        return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
      * Run the process of signing eosio chain teleports to eth chain
      * @param id Teleport id to start from
      * @param requestAmount Amount of requested teleports per request
@@ -580,38 +579,49 @@ var EosOracle = /** @class */ (function () {
             var signProcessData, e_4;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0:
-                        this.logViaBot("Starting *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDEB4\u200D\u2642\uFE0F"), true);
+                    case 0: return [4 /*yield*/, this.logViaBot("Starting *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDEB4\u200D\u2642\uFE0F"), true)
+                        // Create an object to change the current id on each run
+                    ];
+                    case 1:
+                        _a.sent();
                         // Create an object to change the current id on each run
                         this.running = true;
-                        _a.label = 1;
-                    case 1:
-                        _a.trys.push([1, 8, , 9]);
-                        signProcessData = { lowerId: id, amount: requestAmount };
                         _a.label = 2;
                     case 2:
-                        if (!this.running) return [3 /*break*/, 7];
-                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
+                        _a.trys.push([2, 9, , 11]);
+                        signProcessData = { lowerId: id, amount: requestAmount };
+                        _a.label = 3;
                     case 3:
-                        _a.sent();
-                        return [4 /*yield*/, this.updateTimes()];
+                        if (!this.running) return [3 /*break*/, 8];
+                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
                     case 4:
                         _a.sent();
-                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
+                        return [4 /*yield*/, this.updateTimes()];
                     case 5:
                         _a.sent();
-                        return [4 /*yield*/, EosOracle.WaitWithAnimation(waitCycle, 'All available teleports signed')];
+                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
                     case 6:
                         _a.sent();
-                        return [3 /*break*/, 2];
-                    case 7: return [3 /*break*/, 9];
-                    case 8:
-                        e_4 = _a.sent();
-                        this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(e_4));
-                        return [3 /*break*/, 9];
+                        return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitCycle, 'All available teleports signed')];
+                    case 7:
+                        _a.sent();
+                        return [3 /*break*/, 3];
+                    case 8: return [3 /*break*/, 11];
                     case 9:
-                        this.logViaBot("Thread closed of *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDC80"), true);
-                        return [2 /*return*/];
+                        e_4 = _a.sent();
+                        return [4 /*yield*/, this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(e_4))];
+                    case 10:
+                        _a.sent();
+                        return [3 /*break*/, 11];
+                    case 11: return [4 /*yield*/, this.logViaBot("Thread closed of *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDC80"), true)];
+                    case 12:
+                        _a.sent();
+                        if (!this.telegram.bot) return [3 /*break*/, 14];
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
+                    case 13:
+                        _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real
+                        _a.label = 14;
+                    case 14: return [2 /*return*/];
                 }
             });
         });

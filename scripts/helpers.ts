@@ -42,3 +42,23 @@ export function hexToString(hexString: string) {
     }
     return str
 }
+
+/**
+ * Wait for a defined amount of time and show remaining seconds if the log output is a teletypewriter (editable console)
+ * @param s Seconds to wait
+ */
+    export const WaitWithAnimation = async (s: number, info: string = '') => {
+    if(process.stdout.isTTY){
+        process.stdout.write(info + "\n\x1b[?25l")
+        for(let i = 0; i < s; i++){
+            process.stdout.write(`💤 ${i} s / ${s} s 💤`)
+            await sleep(1000)
+            process.stdout.write("\r\x1b[K")
+        }
+        process.stdout.moveCursor(0, -1) // up one line
+        process.stdout.clearLine(1) // from cursor to end
+    } else {
+        console.log(info)
+        await sleep(s*1000)
+    }
+}

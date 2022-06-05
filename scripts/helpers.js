@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
+exports.WaitWithAnimation = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
 /**
  * Convert an Uint8Array to an hex in string format
  * @param bytes Uint8Array
@@ -84,3 +84,45 @@ function hexToString(hexString) {
     return str;
 }
 exports.hexToString = hexToString;
+/**
+ * Wait for a defined amount of time and show remaining seconds if the log output is a teletypewriter (editable console)
+ * @param s Seconds to wait
+ */
+var WaitWithAnimation = function (s, info) {
+    if (info === void 0) { info = ''; }
+    return __awaiter(void 0, void 0, void 0, function () {
+        var i;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (!process.stdout.isTTY) return [3 /*break*/, 5];
+                    process.stdout.write(info + "\n\x1b[?25l");
+                    i = 0;
+                    _a.label = 1;
+                case 1:
+                    if (!(i < s)) return [3 /*break*/, 4];
+                    process.stdout.write("\uD83D\uDCA4 ".concat(i, " s / ").concat(s, " s \uD83D\uDCA4"));
+                    return [4 /*yield*/, (0, exports.sleep)(1000)];
+                case 2:
+                    _a.sent();
+                    process.stdout.write("\r\x1b[K");
+                    _a.label = 3;
+                case 3:
+                    i++;
+                    return [3 /*break*/, 1];
+                case 4:
+                    process.stdout.moveCursor(0, -1); // up one line
+                    process.stdout.clearLine(1); // from cursor to end
+                    return [3 /*break*/, 7];
+                case 5:
+                    console.log(info);
+                    return [4 /*yield*/, (0, exports.sleep)(s * 1000)];
+                case 6:
+                    _a.sent();
+                    _a.label = 7;
+                case 7: return [2 /*return*/];
+            }
+        });
+    });
+};
+exports.WaitWithAnimation = WaitWithAnimation;

@@ -5,16 +5,16 @@
  */
 
 process.env.NTBA_FIX_319 = '1' // Needed to disable TelegramBot warning
-import { RpcError, Serialize } from "eosjs"
+import { RpcError, Serialize } from 'eosjs'
 import { GetTableRowsResult } from 'eosjs/dist/eosjs-rpc-interfaces'
-import { JsSignatureProvider } from "eosjs/dist/eosjs-jssig"
-import { TextDecoder, TextEncoder } from "text-encoding"
-import { ecsign, keccak, toRpcSig } from "ethereumjs-util"
+import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
+import { TextDecoder, TextEncoder } from 'text-encoding'
+import { ecsign, keccak, toRpcSig } from 'ethereumjs-util'
 import { EosApi } from './EndpointSwitcher'
 import { ConfigType, TeleportTableEntry } from './CommonTypes'
 import yargs from 'yargs'
-import {sleep, toHexString, fromHexString} from '../scripts/helpers'
-import TelegramBot from "node-telegram-bot-api"
+import {sleep, toHexString, fromHexString, WaitWithAnimation} from '../scripts/helpers'
+import TelegramBot from 'node-telegram-bot-api'
 
 // /**
 //  * Check if two Uint8Arrays are equal
@@ -79,11 +79,11 @@ class EosOracle {
      * Send a message to a telegram account
      * @param msg Message
      */
-    logViaBot(msg: string, markdown: boolean = false) {
+    async logViaBot(msg: string, markdown: boolean = false) {
         console.log(msg)
         if(this.telegram.bot){
             for (let id of this.telegram.statusIds) {
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -93,11 +93,11 @@ class EosOracle {
      * @param msg 
      * @param markdown 
      */
-    logError(msg: string, markdown: boolean = false){
+    async logError(msg: string, markdown: boolean = false){
         console.error(msg)
         if(this.telegram.bot && this.telegram.errorIds.length > 0){
             for (let id of this.telegram.errorIds) {
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -431,7 +431,7 @@ class EosOracle {
                     waitForIrr = EosOracle.maxWait
                 }
                 console.log(`Wait ${waitForIrr} seconds until teleport id ${signProcessData.lowerId} is irreversible.`)
-                await EosOracle.WaitWithAnimation(waitForIrr)
+                await WaitWithAnimation(waitForIrr)
                 await this.signAllTeleportsUntilNow(signProcessData)
             }
             else if(chain_data.more == true){
@@ -440,22 +440,6 @@ class EosOracle {
             }
         }
     }
-    
-    /**
-     * Wait for a defined amount of time and show remaining seconds
-     * @param s Seconds to wait
-     */
-    static async WaitWithAnimation(s: number, info: string = ""){
-        process.stdout.write(info + "\n\x1b[?25l")
-        for(let i = 0; i < s; i++){
-            process.stdout.write(`💤 ${i} s / ${s} s 💤`)
-            await sleep(1000)
-            process.stdout.write("\r\x1b[K")
-        }
-        
-        process.stdout.moveCursor(0, -1) // up one line
-        process.stdout.clearLine(1) // from cursor to end
-    }
 
     /**
      * Run the process of signing eosio chain teleports to eth chain
@@ -463,7 +447,7 @@ class EosOracle {
      * @param requestAmount Amount of requested teleports per request
      */
     async run(id = 0, requestAmount = 100, waitCycle = EosOracle.maxWait){
-        this.logViaBot(`Starting *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 🚴‍♂️`, true)
+        await this.logViaBot(`Starting *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 🚴‍♂️`, true)
 
         // Create an object to change the current id on each run
         this.running = true
@@ -473,12 +457,15 @@ class EosOracle {
                 await this.eos_api.nextEndpoint()
                 await this.updateTimes()
                 await this.signAllTeleportsUntilNow(signProcessData)
-                await EosOracle.WaitWithAnimation(waitCycle, 'All available teleports signed')
+                await WaitWithAnimation(waitCycle, 'All available teleports signed')
             }
         } catch (e){
-            this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ${e}`)
+            await this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ${e}`)
         }
-        this.logViaBot(`Thread closed of *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 💀`, true)
+        await this.logViaBot(`Thread closed of *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 💀`, true)
+        if(this.telegram.bot){
+            await sleep(5000)   // Wait some seconds to finsih the sending of telegram messages for real
+        }
     }
 }
 

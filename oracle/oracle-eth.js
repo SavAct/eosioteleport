@@ -126,13 +126,29 @@ var EthOracle = /** @class */ (function () {
      */
     EthOracle.prototype.logViaBot = function (msg, markdown) {
         if (markdown === void 0) { markdown = false; }
-        console.log(msg);
-        if (this.telegram.bot) {
-            for (var _i = 0, _a = this.telegram.statusIds; _i < _a.length; _i++) {
-                var id = _a[_i];
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
-            }
-        }
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, id;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        console.log(msg);
+                        if (!this.telegram.bot) return [3 /*break*/, 4];
+                        _i = 0, _a = this.telegram.statusIds;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 4];
+                        id = _a[_i];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                    case 2:
+                        _b.sent();
+                        _b.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
     };
     /**
      * Send a message to telegram accounts which is marked for error log
@@ -141,13 +157,29 @@ var EthOracle = /** @class */ (function () {
      */
     EthOracle.prototype.logError = function (msg, markdown) {
         if (markdown === void 0) { markdown = false; }
-        console.error(msg);
-        if (this.telegram.bot && this.telegram.errorIds.length > 0) {
-            for (var _i = 0, _a = this.telegram.errorIds; _i < _a.length; _i++) {
-                var id = _a[_i];
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined });
-            }
-        }
+        return __awaiter(this, void 0, void 0, function () {
+            var _i, _a, id;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        console.error(msg);
+                        if (!(this.telegram.bot && this.telegram.errorIds.length > 0)) return [3 /*break*/, 4];
+                        _i = 0, _a = this.telegram.errorIds;
+                        _b.label = 1;
+                    case 1:
+                        if (!(_i < _a.length)) return [3 /*break*/, 4];
+                        id = _a[_i];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                    case 2:
+                        _b.sent();
+                        _b.label = 3;
+                    case 3:
+                        _i++;
+                        return [3 /*break*/, 1];
+                    case 4: return [2 /*return*/];
+                }
+            });
+        });
     };
     /**
      * Get object of the data of an "claimed"-event on eth chain
@@ -670,7 +702,7 @@ var EthOracle = /** @class */ (function () {
                         this.running = true;
                         _a.label = 1;
                     case 1:
-                        _a.trys.push([1, 29, , 30]);
+                        _a.trys.push([1, 29, , 31]);
                         return [4 /*yield*/, this.eth_api.nextEndpoint()];
                     case 2:
                         _a.sent();
@@ -755,7 +787,7 @@ var EthOracle = /** @class */ (function () {
                         _a.label = 18;
                     case 18:
                         if (!(latest_block - from_block <= 1000)) return [3 /*break*/, 20];
-                        return [4 /*yield*/, EthOracle.WaitWithAnimation(waitCycle, 'Wait for new blocks...')];
+                        return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitCycle, 'Wait for new blocks...')];
                     case 19:
                         _a.sent();
                         return [3 /*break*/, 21];
@@ -784,47 +816,22 @@ var EthOracle = /** @class */ (function () {
                         // Select the next endpoint to distribute the requests
                         _a.sent();
                         return [3 /*break*/, 4];
-                    case 28: return [3 /*break*/, 30];
+                    case 28: return [3 /*break*/, 31];
                     case 29:
                         e_7 = _a.sent();
-                        this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(e_7));
-                        return [3 /*break*/, 30];
+                        return [4 /*yield*/, this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(e_7))];
                     case 30:
-                        this.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true);
-                        return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Wait for a defined amount of time and show remaining seconds
-     * @param s Seconds to wait
-     */
-    EthOracle.WaitWithAnimation = function (s, info) {
-        if (info === void 0) { info = ''; }
-        return __awaiter(this, void 0, void 0, function () {
-            var i;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        process.stdout.write(info + "\n\x1b[?25l");
-                        i = 0;
-                        _a.label = 1;
-                    case 1:
-                        if (!(i < s)) return [3 /*break*/, 4];
-                        process.stdout.write("\uD83D\uDCA4 ".concat(i, " s / ").concat(s, " s \uD83D\uDCA4"));
-                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
-                    case 2:
                         _a.sent();
-                        process.stdout.write("\r\x1b[K");
-                        _a.label = 3;
-                    case 3:
-                        i++;
-                        return [3 /*break*/, 1];
-                    case 4:
-                        process.stdout.moveCursor(0, -1); // up one line
-                        process.stdout.clearLine(1); // from cursor to end
-                        return [2 /*return*/];
+                        return [3 /*break*/, 31];
+                    case 31: return [4 /*yield*/, this.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true)];
+                    case 32:
+                        _a.sent();
+                        if (!this.telegram.bot) return [3 /*break*/, 34];
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
+                    case 33:
+                        _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real
+                        _a.label = 34;
+                    case 34: return [2 /*return*/];
                 }
             });
         });

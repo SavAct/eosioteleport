@@ -13,7 +13,7 @@ import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 import { EosApi, EthApi } from './EndpointSwitcher'
-import {sleep, hexToString} from '../scripts/helpers'
+import {sleep, hexToString, WaitWithAnimation} from '../scripts/helpers'
 import TelegramBot from 'node-telegram-bot-api'
 
 type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string, id?: number, netId: string}}
@@ -129,11 +129,11 @@ class EthOracle {
      * Send a message to a telegram account
      * @param msg Message
      */
-    logViaBot(msg: string, markdown: boolean = false) {
+    async logViaBot(msg: string, markdown: boolean = false) {
         console.log(msg)
         if(this.telegram.bot){
             for (let id of this.telegram.statusIds) {
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -143,11 +143,11 @@ class EthOracle {
      * @param msg 
      * @param markdown 
      */
-    logError(msg: string, markdown: boolean = false){
+    async logError(msg: string, markdown: boolean = false){
         console.error(msg)
         if(this.telegram.bot && this.telegram.errorIds.length > 0){
             for (let id of this.telegram.errorIds) {
-                this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, msg, { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -600,7 +600,7 @@ class EthOracle {
                         await sleep(10000)
                     }
                     if (latest_block - from_block <= 1000) {
-                        await EthOracle.WaitWithAnimation(waitCycle, 'Wait for new blocks...')
+                        await WaitWithAnimation(waitCycle, 'Wait for new blocks...')
                     } else {
                         console.log(`Latest block is ${latest_block}. Not waiting...`)
                     }
@@ -620,25 +620,12 @@ class EthOracle {
                 await this.eos_api.nextEndpoint()
             }
         } catch(e){
-            this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network}. ${e}`)
+            await this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network}. ${e}`)
         }
-        this.logViaBot(`Thread closed of *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 💀`, true)
-    }
-
-    /**
-     * Wait for a defined amount of time and show remaining seconds
-     * @param s Seconds to wait
-     */
-    static async WaitWithAnimation(s: number, info: string = ''){
-        process.stdout.write(info + "\n\x1b[?25l")
-        for(let i = 0; i < s; i++){
-            process.stdout.write(`💤 ${i} s / ${s} s 💤`)
-            await sleep(1000)
-            process.stdout.write("\r\x1b[K")
+        await this.logViaBot(`Thread closed of *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 💀`, true)
+        if(this.telegram.bot){
+            await sleep(5000)   // Wait some seconds to finsih the sending of telegram messages for real
         }
-        
-        process.stdout.moveCursor(0, -1) // up one line
-        process.stdout.clearLine(1) // from cursor to end
     }
 }
 
