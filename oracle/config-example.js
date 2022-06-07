@@ -39,5 +39,14 @@ module.exports = {
         privateToken: '4814812745:YourSecretTelegramBotApiToken-927742',  // Your private telegram bot API token got by @BotFather
         statusIds: [00000000, 00000000],  // IDs of Telegram accounts which will receive a message on starting and ending the thread of the oracle program. You can use telegram-id-provider.js to request your id. 
         errorIds: [00000000],    // IDs of Telegram accounts which will receive error messages
+        costsIds: [00000000],    // IDs of Telegram accounts which will receive a message on each action which costs system tokens
+    },
+    powerup:{                    // Optional parameter to borrow resources if needed
+        contract: 'eosio',       // Contract which provides the powerup action
+        paymenttoken: 'eosio.token', // System token contract
+        days: 1,                 // Days the CPU and NET will be borrowed for on request. Currently only 1 day is possible on EOS mainnet.
+        cpu_frac: 1000000,       // Fraction of total available CPU time = 10^15 / cpu_frac which will borrowed when needed
+        net_frac: 100000,        // Fraction of total available NET time = 10^15 / cpu_frac which will borrowed when needed
+        max_payment: '0.2000 EOS',  // Maximum amount which would be paid per day of a running instance (The right number of decimal places is important)
     }
 }

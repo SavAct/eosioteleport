@@ -18,6 +18,7 @@ import * as chai from 'chai'
 
 import { Teleporteos, TeleporteosStatsItem } from './teleporteos'
 import { EosioToken } from '../eosio.token/eosio.token'
+import {assetdataToString, stringToAsset} from '../../../../scripts/helpers'
 
 const ethToken = '2222222222222222222222222222222222222222222222222222222222222222'
 
@@ -712,7 +713,7 @@ describe('teleporteos', async () => {
     context('with incorrect auth', async () => {
       it('should fail with auth error f1', async () => {
         await assertMissingAuthority(
-          teleporteos.setfee(amountToAsset(fixfee, token_symbol, 4), '0.007', { from: sender1 })
+          teleporteos.setfee(assetdataToString(fixfee, token_symbol, 4), '0.007', { from: sender1 })
         )
       })
     })
@@ -753,7 +754,7 @@ describe('teleporteos', async () => {
       })
       context('with valid fees', async () => {
         it('should succeed f7', async () => {
-          await teleporteos.setfee(amountToAsset(fixfee, token_symbol, 4), '0.007', { from: teleporteos.account })
+          await teleporteos.setfee(assetdataToString(fixfee, token_symbol, 4), '0.007', { from: teleporteos.account })
         })
         it('should update stats table f8', async () => {
           let { rows: [item] } = await teleporteos.statsTable()
@@ -806,7 +807,7 @@ describe('teleporteos', async () => {
           chai.expect(stat.collected.toString()).equal(fee.toString(), "Wrong collected fee amount")
           // check teleport amount 
           let teleports = await teleporteos.teleportsTable({reverse: true})
-          chai.expect(teleports.rows[0].quantity).equal(amountToAsset(value - fee, token_symbol, 4), "Wrong fee calculation")
+          chai.expect(teleports.rows[0].quantity).equal(assetdataToString(value - fee, token_symbol, 4), "Wrong fee calculation")
         })
         context('valid received until confirmation', async () => {
           let sender1Balance: bigint;
@@ -814,7 +815,7 @@ describe('teleporteos', async () => {
           let oldStat: TeleporteosStatsItem
           const hash = '1111111111111111111111111111111111111111111111111111111111111113'
           const sendAmount = BigInt(1230)
-          const sendAsset = amountToAsset(sendAmount, token_symbol, 4)
+          const sendAsset = assetdataToString(sendAmount, token_symbol, 4)
           before(async () => {
             // Get current balance of sender 1 on token contract
             let { rows: [a_item_old] } = await alienworldsToken.accountsTable({scope: sender1.name})
@@ -891,7 +892,7 @@ describe('teleporteos', async () => {
       })
       const hash = '1111111111111111111111111111111111111111111111111111111111111114'
       const sendAmount = BigInt(10000)
-      const sendAsset = amountToAsset(sendAmount, token_symbol, 4)
+      const sendAsset = assetdataToString(sendAmount, token_symbol, 4)
       it('should succeed th3', async () => {
         // Set threshold to 2
         await teleporteos.setthreshold(2, { from: teleporteos.account })
@@ -957,7 +958,7 @@ describe('teleporteos', async () => {
       await teleporteos.teleport(alienworldsToken.account.name, `203.0000 ${token_symbol}`, 2, ethToken, { from: alienworldsToken.account })
       await teleporteos.teleport(alienworldsToken.account.name, `203.0000 ${token_symbol}`, 3, ethToken, { from: alienworldsToken.account })
       const fee = calcFee(BigInt(2030000), BigInt(fixfee), 0.007)
-      const sendAsset = amountToAsset(BigInt(2030000) - fee, token_symbol, 4)
+      const sendAsset = assetdataToString(BigInt(2030000) - fee, token_symbol, 4)
       // Claim all teleports but not the second in table 
       await teleporteos.claimed(oracle1.name, 2, ethToken, sendAsset, { from: oracle1 })
       await teleporteos.claimed(oracle1.name, 3, ethToken, sendAsset, { from: oracle1 })
@@ -1257,22 +1258,6 @@ async function issueTokens() {
     'inital balance',
     { from: alienworldsToken.account }
   )
-}
-
-function amountToAsset(amount: bigint, symbol_name: string, precision: number){
-  let s = amount.toString().padStart(precision, '0')
-  let p = s.length - precision
-  let int = s.substring(0, p)
-  return `${int? int : '0'}${'.'}${s.substring(p)} ${symbol_name}` 
-}
-
-function stringToAsset(asset_str: string){
-  let s = asset_str.indexOf('.')
-  let e = asset_str.indexOf(' ', s)
-  let precision = e - s
-  let name = asset_str.substring(e + 1).trim()
-  let amount =  BigInt(asset_str.substring(0, s) + asset_str.substring(s + 1, e))
-  return {amount, symbol: {precision, name}}
 }
 
 function calcFee(amount: bigint, fixfeeAmount: bigint, varfee: number){

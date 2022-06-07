@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WaitWithAnimation = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
+exports.stringToMarkDown = exports.WaitWithAnimation = exports.stringToAsset = exports.assetToString = exports.assetdataToString = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
 /**
  * Convert an Uint8Array to an hex in string format
  * @param bytes Uint8Array
@@ -68,6 +68,11 @@ var sleep = function (ms) { return __awaiter(void 0, void 0, void 0, function ()
     });
 }); };
 exports.sleep = sleep;
+/**
+ * Convert a hex string into a string
+ * @param hexString
+ * @returns
+ */
 function hexToString(hexString) {
     var reg = hexString.match(/.{1,2}/g);
     var str = '';
@@ -84,6 +89,43 @@ function hexToString(hexString) {
     return str;
 }
 exports.hexToString = hexToString;
+/**
+ * Convert the data of an asset to a string
+ * @param amount
+ * @param symbol_name
+ * @param precision
+ * @returns
+ */
+var assetdataToString = function (amount, symbol_name, precision) {
+    var s = amount.toString().padStart(precision, '0');
+    var p = s.length - precision;
+    var int = s.substring(0, p);
+    return "".concat(int ? int : '0').concat('.').concat(s.substring(p), " ").concat(symbol_name);
+};
+exports.assetdataToString = assetdataToString;
+/**
+ * Convert the data of an asset to a string
+ * @param asset
+ * @returns
+ */
+var assetToString = function (asset) {
+    return (0, exports.assetdataToString)(asset.amount, asset.symbol.name, asset.symbol.precision);
+};
+exports.assetToString = assetToString;
+/**
+ * Convert a string to an asset object
+ * @param asset_str
+ * @returns
+ */
+var stringToAsset = function (asset_str) {
+    var s = asset_str.indexOf('.');
+    var e = asset_str.indexOf(' ', s);
+    var precision = (e - s) - 1;
+    var name = asset_str.substring(e + 1).trim();
+    var amount = BigInt(asset_str.substring(0, s) + asset_str.substring(s + 1, e));
+    return { amount: amount, symbol: { precision: precision, name: name } };
+};
+exports.stringToAsset = stringToAsset;
 /**
  * Wait for a defined amount of time and show remaining seconds if the log output is a teletypewriter (editable console)
  * @param s Seconds to wait
@@ -126,3 +168,12 @@ var WaitWithAnimation = function (s, info) {
     });
 };
 exports.WaitWithAnimation = WaitWithAnimation;
+/**
+ * Replace special characters of a string into markdown
+ * @param str Raw string
+ * @returns Markdown string
+ */
+var stringToMarkDown = function (str) {
+    return str.replace(/\./g, '\\.').replace(/-/g, '\\-');
+};
+exports.stringToMarkDown = stringToMarkDown;

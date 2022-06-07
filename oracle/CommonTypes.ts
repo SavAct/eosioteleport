@@ -34,7 +34,18 @@ export interface ConfigType {
         privateToken: string,
         statusIds?: Array<number>,
         errorIds?: Array<number>,
-    }
+        costsIds?: Array<number>,
+    },
+    powerup?: PowerUp,
+}
+
+export interface PowerUp{
+    contract: string,
+    paymenttoken: string,
+    days: number,
+    cpu_frac: number,
+    net_frac: number,
+    max_payment: string,
 }
 
 export interface TeleportTableEntry{
