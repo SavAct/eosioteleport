@@ -886,8 +886,8 @@ describe('teleporteos', async () => {
     context('with correct auth', async () => {
       it('and incorrect amount should fail th2', async () => {
         await assertEOSErrorIncludesMessage(
-          teleporteos.setthreshold(0, { from: teleporteos.account }),
-          'Needed confirmation amount has to be grater than 0'
+          teleporteos.setthreshold(1, { from: teleporteos.account }),
+          'Needed confirmation amount has to be grater than 1'
         )
       })
       const hash = '1111111111111111111111111111111111111111111111111111111111111114'

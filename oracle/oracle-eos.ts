@@ -532,9 +532,12 @@ class EosOracle {
 
             // Check time
             if(item.time > this.irreversible_time){
-                waitForIrr = item.time - this.irreversible_time
-                lastHandledId = item.id
-                break
+                await this.updateTimes()
+                if(item.time > this.irreversible_time){
+                    waitForIrr = item.time - this.irreversible_time
+                    lastHandledId = item.id
+                    break
+                }
             }
 
             if(!isVerifyed){
@@ -562,7 +565,6 @@ class EosOracle {
                 await this.signAllTeleportsUntilNow(signProcessData)
             }
             else if(chain_data.more == true){
-                await this.updateTimes()
                 await this.signAllTeleportsUntilNow(signProcessData)
             }
         }

@@ -11,7 +11,7 @@ ACTION teleporteos::ini(const asset min, const asset fixfee, const double varfee
 
   check(min.symbol == TOKEN_SYMBOL, "Wrong token symbol of min amount");
   check(fixfee.symbol == TOKEN_SYMBOL, "Wrong token symbol of fee");
-  check(threshold > 0, "Needed confirmation amount has to be grater than 0");
+  check(threshold >= 2, "Needed confirmation amount has to be grater than 1");
   check(varfee <= 0.2 && varfee >= 0, "Variable fee has to be between 0 and 0.20");
 
   check(_stats.find(TOKEN_SYMBOL.raw()) == _stats.end(), "Already initialized");
@@ -475,7 +475,7 @@ ACTION teleporteos::setfee(const asset fixfee, const double varfee){
 
 ACTION teleporteos::setthreshold(const uint32_t threshold){
   require_auth(get_self());
-  check(threshold > 0, "Needed confirmation amount has to be grater than 0");
+  check(threshold >= 2, "Needed confirmation amount has to be grater than 1");
   auto stat = _stats.find(TOKEN_SYMBOL.raw());
   _stats.modify(*stat, same_payer, [&](auto &s) { 
     s.threshold = threshold;
