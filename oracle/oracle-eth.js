@@ -122,7 +122,7 @@ var EthOracle = /** @class */ (function () {
         }
     };
     /**
-     * Initialize lending options
+     * Initialize borrow options
      */
     EthOracle.prototype.iniBorrow = function () {
         if (this.config.powerup) {
@@ -131,11 +131,17 @@ var EthOracle = /** @class */ (function () {
                 throw ('Wrong definition of lend.max_payment');
             }
             if (this.config.eos.network == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906') {
+                if (this.config.powerup.contract != 'eosio') {
+                    throw ('Wrong powerup contract');
+                }
+                if (this.config.powerup.paymenttoken != 'eosio.token') {
+                    throw ('Wrong system token symbol for powerup');
+                }
                 if (asset.symbol.name != 'EOS') {
-                    throw ('Wrong token symbol of lend.max_payment');
+                    throw ('Wrong token symbol of powerup.max_payment');
                 }
                 if (asset.symbol.precision != 4) {
-                    throw ('Wrong token precision of lend.max_payment');
+                    throw ('Wrong token precision of powerup.max_payment');
                 }
             }
             this.dayCalculator.max_payment = (0, helpers_1.stringToAsset)(this.config.powerup.max_payment);
@@ -159,7 +165,7 @@ var EthOracle = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -190,7 +196,7 @@ var EthOracle = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -221,7 +227,7 @@ var EthOracle = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;

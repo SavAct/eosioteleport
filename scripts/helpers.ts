@@ -78,8 +78,17 @@ export const assetdataToString = (amount: bigint, symbol_name: string, precision
  * @returns 
  */
 export const stringToAsset = (asset_str: string) : Asset =>{
+    if(typeof asset_str != 'string'){
+        throw `Asset string is not defined`
+    }
     let s = asset_str.indexOf('.')
+    if(s == -1){
+        throw `Missing precision of asset string: ${asset_str}`
+    }
     let e = asset_str.indexOf(' ', s)
+    if(e == -1){
+        throw `Missing symbol of asset string: ${asset_str}`
+    }
     let precision = (e - s) - 1    
     let name = asset_str.substring(e + 1).trim()
     let amount =  BigInt(asset_str.substring(0, s) + asset_str.substring(s + 1, e))
@@ -106,11 +115,33 @@ export const WaitWithAnimation = async (s: number, info: string = '') => {
     }
 }
 
+
+const rpMarkDown = [
+    { reg: /\\/g, repl: '\\' },  
+    { reg: /\*/g, repl: '\\*' },
+    { reg: /\_/g, repl: '\\_' },
+    { reg: /\./g, repl: '\\.' },
+    { reg: /\!/g, repl: '\\!' },
+    { reg: /\+/g, repl: '\\+' },
+    { reg: /\-/g, repl: '\\-' },
+    { reg: /\`/g, repl: '\\`' },
+    { reg: /#/g, repl: '\\#' },
+    { reg: /\//g, repl: '\\/' },
+    { reg: /\{/g, repl: '\\{' },
+    { reg: /\}/g, repl: '\\}' },
+    { reg: /\(/g, repl: '\\(' },
+    { reg: /\)/g, repl: '\\)' },
+    { reg: /\[/g, repl: '\\[' },
+    { reg: /\]/g, repl: '\\]' },
+    { reg: /\</g, repl: '&lt;' },
+    { reg: /\>/g, repl: '&gt;' },
+]
+
 /**
  * Replace special characters of a string into markdown 
  * @param str Raw string
  * @returns Markdown string
  */
 export const stringToMarkDown = (str: string)=>{
-    return str.replace(/\./g, '\\.').replace(/-/g, '\\-')
+    return rpMarkDown.reduce((str, replacement) => { return str.replace(replacement.reg, replacement.repl ) }, str)
 }

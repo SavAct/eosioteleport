@@ -93,7 +93,7 @@ var EosOracle = /** @class */ (function () {
         }
     };
     /**
-     * Initialize lending options
+     * Initialize borrow options
      */
     EosOracle.prototype.iniBorrow = function () {
         if (this.config.powerup) {
@@ -102,11 +102,17 @@ var EosOracle = /** @class */ (function () {
                 throw ('Wrong definition of lend.max_payment');
             }
             if (this.config.eos.network == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906') {
+                if (this.config.powerup.contract != 'eosio') {
+                    throw ('Wrong powerup contract');
+                }
+                if (this.config.powerup.paymenttoken != 'eosio.token') {
+                    throw ('Wrong system token symbol for powerup');
+                }
                 if (asset.symbol.name != 'EOS') {
-                    throw ('Wrong token symbol of lend.max_payment');
+                    throw ('Wrong token symbol of powerup.max_payment');
                 }
                 if (asset.symbol.precision != 4) {
-                    throw ('Wrong token precision of lend.max_payment');
+                    throw ('Wrong token precision of powerup.max_payment');
                 }
             }
             this.dayCalculator.max_payment = (0, helpers_1.stringToAsset)(this.config.powerup.max_payment);
@@ -130,7 +136,7 @@ var EosOracle = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -161,7 +167,7 @@ var EosOracle = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -192,7 +198,7 @@ var EosOracle = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -321,6 +327,7 @@ var EosOracle = /** @class */ (function () {
                         return [4 /*yield*/, this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS')];
                     case 3:
                         assetBefore = _a.apply(void 0, [(_c.sent())[0]]);
+                        console.log('try to buy resource');
                         return [4 /*yield*/, this.eos_api.getAPI().transact({
                                 actions: [{
                                         account: 'eosio',
@@ -344,6 +351,7 @@ var EosOracle = /** @class */ (function () {
                             })];
                     case 4:
                         result = _c.sent();
+                        console.log('got result');
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 5:
                         _c.sent();
@@ -629,14 +637,14 @@ var EosOracle = /** @class */ (function () {
                         rowIndex = 0;
                         _b.label = 2;
                     case 2:
-                        if (!(rowIndex < lowest_amount)) return [3 /*break*/, 8];
+                        if (!(rowIndex < lowest_amount)) return [3 /*break*/, 10];
                         item = chain_data.rows[rowIndex];
                         // Check if already claimed anf if the required amount of signes is already reached
                         if (item.claimed) {
                             console.log("Teleport id ".concat(item.id, ", is already claimed. \u2714\uFE0F"));
                             if (!this.force) {
                                 lastHandledId = item.id + 1;
-                                return [3 /*break*/, 7];
+                                return [3 /*break*/, 9];
                             }
                         }
                         // Check if the required amount of signes is already reached
@@ -644,14 +652,14 @@ var EosOracle = /** @class */ (function () {
                             console.log("Teleport id ".concat(item.id, ", has already sufficient confirmations. \u2714\uFE0F"));
                             if (!this.force) {
                                 lastHandledId = item.id + 1;
-                                return [3 /*break*/, 7];
+                                return [3 /*break*/, 9];
                             }
                         }
                         // Check if this oracle account has already signed
                         if (item.oracles.find(function (oracle) { return oracle == _this.config.eos.oracleAccount; }) != undefined) {
                             console.log("Teleport id ".concat(item.id, ", has already signed. \u2714\uFE0F"));
                             lastHandledId = item.id + 1;
-                            return [3 /*break*/, 7];
+                            return [3 /*break*/, 9];
                         }
                         logData = void 0;
                         verifyLogData = EosOracle.serializeLogData_v1(item, 69);
@@ -671,59 +679,61 @@ var EosOracle = /** @class */ (function () {
                         else {
                             logData = EosOracle.serializeLogData_v2(this.eosio_data, item, 81);
                         }
-                        // Check time
+                        if (!(item.time > this.irreversible_time)) return [3 /*break*/, 4];
+                        return [4 /*yield*/, this.updateTimes()];
+                    case 3:
+                        _b.sent();
                         if (item.time > this.irreversible_time) {
                             waitForIrr = item.time - this.irreversible_time;
                             lastHandledId = item.id;
-                            return [3 /*break*/, 8];
+                            return [3 /*break*/, 10];
                         }
-                        if (!!isVerifyed) return [3 /*break*/, 3];
+                        _b.label = 4;
+                    case 4:
+                        if (!!isVerifyed) return [3 /*break*/, 5];
                         this.logError("Teleport id ".concat(item.id, ", skip this one by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \u274C"));
-                        return [3 /*break*/, 6];
-                    case 3: return [4 /*yield*/, EosOracle.signTeleport(logData, this.config.eth.privateKey)
+                        return [3 /*break*/, 8];
+                    case 5: return [4 /*yield*/, EosOracle.signTeleport(logData, this.config.eth.privateKey)
                         // Send signature to eosio chain
                     ];
-                    case 4:
+                    case 6:
                         signature = _b.sent();
                         // Send signature to eosio chain
                         return [4 /*yield*/, this.sendSignAction(item.id, signature)];
-                    case 5:
+                    case 7:
                         // Send signature to eosio chain
                         _b.sent();
-                        _b.label = 6;
-                    case 6:
+                        _b.label = 8;
+                    case 8:
                         lastHandledId = item.id + 1;
-                        _b.label = 7;
-                    case 7:
+                        _b.label = 9;
+                    case 9:
                         rowIndex++;
                         return [3 /*break*/, 2];
-                    case 8:
+                    case 10:
                         // Set next teleport id and get the next teleports
                         signProcessData.lowerId = lastHandledId;
-                        if (!this.running) return [3 /*break*/, 14];
-                        if (!(waitForIrr > 0)) return [3 /*break*/, 11];
+                        if (!this.running) return [3 /*break*/, 15];
+                        if (!(waitForIrr > 0)) return [3 /*break*/, 13];
                         // Wait maximal 180 seconds
                         if (waitForIrr > EosOracle.maxWait) {
                             waitForIrr = EosOracle.maxWait;
                         }
                         console.log("Wait ".concat(waitForIrr, " seconds until teleport id ").concat(signProcessData.lowerId, " is irreversible."));
                         return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitForIrr)];
-                    case 9:
+                    case 11:
                         _b.sent();
                         return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
-                    case 10:
-                        _b.sent();
-                        return [3 /*break*/, 14];
-                    case 11:
-                        if (!(chain_data.more == true)) return [3 /*break*/, 14];
-                        return [4 /*yield*/, this.updateTimes()];
                     case 12:
                         _b.sent();
-                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
+                        return [3 /*break*/, 15];
                     case 13:
+                        if (!(chain_data.more == true)) return [3 /*break*/, 15];
+                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
+                    case 14:
                         _b.sent();
-                        _b.label = 14;
-                    case 14: return [2 /*return*/];
+                        _b.label = 15;
+                    case 15: return [2 /*return*/];
                 }
             });
         });

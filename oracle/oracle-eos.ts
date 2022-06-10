@@ -121,7 +121,7 @@ class EosOracle {
         console.log(msg)
         if(this.telegram.bot){
             for (let id of this.telegram.statusIds) {
-                await this.telegram.bot.sendMessage(id, no_convert? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, no_convert === true? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -135,7 +135,7 @@ class EosOracle {
         console.error(msg)
         if(this.telegram.bot && this.telegram.errorIds.length > 0){
             for (let id of this.telegram.errorIds) {
-                await this.telegram.bot.sendMessage(id, no_convert? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, no_convert === true? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -148,7 +148,7 @@ class EosOracle {
         console.error(msg)
         if(this.telegram.bot && this.telegram.costsIds.length > 0){
             for (let id of this.telegram.costsIds) {
-                await this.telegram.bot.sendMessage(id, no_convert? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, no_convert === true? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -242,6 +242,7 @@ class EosOracle {
         }
         try{
             const assetBefore = stringToAsset((await this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS'))[0])
+console.log('try to buy resource');
 
             const result = await this.eos_api.getAPI().transact({
                 actions: [{
@@ -264,6 +265,7 @@ class EosOracle {
                 blocksBehind: 3,
                 expireSeconds: 30,
             })
+            console.log('got result');
             await sleep(5000)
             const assetAfter = stringToAsset((await this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS'))[0])
             const paymedAmount = assetBefore.amount - assetAfter.amount

@@ -118,8 +118,17 @@ exports.assetToString = assetToString;
  * @returns
  */
 var stringToAsset = function (asset_str) {
+    if (typeof asset_str != 'string') {
+        throw "Asset string is not defined";
+    }
     var s = asset_str.indexOf('.');
+    if (s == -1) {
+        throw "Missing precision of asset string: ".concat(asset_str);
+    }
     var e = asset_str.indexOf(' ', s);
+    if (e == -1) {
+        throw "Missing symbol of asset string: ".concat(asset_str);
+    }
     var precision = (e - s) - 1;
     var name = asset_str.substring(e + 1).trim();
     var amount = BigInt(asset_str.substring(0, s) + asset_str.substring(s + 1, e));
@@ -168,12 +177,32 @@ var WaitWithAnimation = function (s, info) {
     });
 };
 exports.WaitWithAnimation = WaitWithAnimation;
+var rpMarkDown = [
+    { reg: /\\/g, repl: '\\' },
+    { reg: /\*/g, repl: '\\*' },
+    { reg: /\_/g, repl: '\\_' },
+    { reg: /\./g, repl: '\\.' },
+    { reg: /\!/g, repl: '\\!' },
+    { reg: /\+/g, repl: '\\+' },
+    { reg: /\-/g, repl: '\\-' },
+    { reg: /\`/g, repl: '\\`' },
+    { reg: /#/g, repl: '\\#' },
+    { reg: /\//g, repl: '\\/' },
+    { reg: /\{/g, repl: '\\{' },
+    { reg: /\}/g, repl: '\\}' },
+    { reg: /\(/g, repl: '\\(' },
+    { reg: /\)/g, repl: '\\)' },
+    { reg: /\[/g, repl: '\\[' },
+    { reg: /\]/g, repl: '\\]' },
+    { reg: /\</g, repl: '&lt;' },
+    { reg: /\>/g, repl: '&gt;' },
+];
 /**
  * Replace special characters of a string into markdown
  * @param str Raw string
  * @returns Markdown string
  */
 var stringToMarkDown = function (str) {
-    return str.replace(/\./g, '\\.').replace(/-/g, '\\-');
+    return rpMarkDown.reduce(function (str, replacement) { return str.replace(replacement.reg, replacement.repl); }, str);
 };
 exports.stringToMarkDown = stringToMarkDown;
