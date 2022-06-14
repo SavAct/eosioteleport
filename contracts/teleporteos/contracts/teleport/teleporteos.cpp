@@ -304,8 +304,10 @@ ACTION teleporteos::received(name oracle_name, name to, checksum256 ref, asset q
         quantity.amount -= fee;
         
         // Pay out recipient
-        string memo = "Teleport";
-        action(permission_level{get_self(), "active"_n}, TOKEN_CONTRACT, "transfer"_n, make_tuple(get_self(), to, quantity, memo)).send();
+        if(quantity.amount > 0){
+          string memo = "Teleport";
+          action(permission_level{get_self(), "active"_n}, TOKEN_CONTRACT, "transfer"_n, make_tuple(get_self(), to, quantity, memo)).send();
+        }
 
         completed = true;
       } else {

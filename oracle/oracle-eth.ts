@@ -13,9 +13,11 @@ import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 import { EosApi, EthApi } from './EndpointSwitcher'
-import {sleep, hexToString, WaitWithAnimation, assetdataToString, stringToAsset, Asset, stringToMarkDown} from '../scripts/helpers'
-import TelegramBot from 'node-telegram-bot-api'
+import {sleep, hexToString, WaitWithAnimation, assetdataToString, stringToAsset, Asset} from '../scripts/helpers'
 import { RpcError } from 'eosjs'
+import { TelegramMessenger } from './TelegramMesseger'
+import { ResourcesManager } from './ResourcenManager'
+import { Action } from 'eosjs/dist/eosjs-serialize'
 
 type EthDataConfig = {precision: number, symbol: string, eos:{oracleAccount: string, id?: number, netId: string}}
 
@@ -61,19 +63,8 @@ class EthOracle {
     private eth_api: EthApi
     private minTrySend = 3
     
-    private dayCalculator : {currentCosts: bigint, fromTime: number, max_payment: Asset} = {
-        currentCosts: BigInt(0),
-        fromTime: 0,
-        max_payment: {amount:BigInt(0), symbol:{name:'', precision:0}}
-    }
-    
-    private telegram: {
-        bot : TelegramBot | undefined;
-        statusIds : Array<number>;
-        errorIds: Array<number>;
-        costsIds: Array<number>;
-    }  = {bot: undefined, statusIds: [], errorIds: [], costsIds:[]}
-
+    private telegram: TelegramMessenger
+    private rsManager: ResourcesManager
     
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider){
         
@@ -89,8 +80,8 @@ class EthOracle {
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
         
         // Initialize the telegram bot and lend options
-        this.iniBot()
-        this.iniBorrow()
+        this.telegram = new TelegramMessenger(config.telegram)
+        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram)
         
         // Create interfaces for eosio and eth chains
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
@@ -108,91 +99,6 @@ class EthOracle {
             default:
                 this.claimed_logEvent = EthOracle.version_v1.claimed
                 this.teleport_logEvent = EthOracle.version_v1.teleport
-        }
-    }
-
-    /**
-     * Initialize the telegram bot
-     */
-     iniBot(){
-        if(this.config.telegram){
-            if(typeof this.config.telegram.statusIds != 'object'){
-                console.error('Use the telegram id provider to get you personal contactId and store it in the config file')
-                process.exit(1)
-            } else {
-                this.telegram.statusIds = this.config.telegram.statusIds
-                if(this.config.telegram.errorIds){
-                    this.telegram.errorIds = this.config.telegram.errorIds
-                }
-            }
-            this.telegram.bot = new TelegramBot(this.config.telegram.privateToken, {polling: false});
-        }
-    }
-
-    /**
-     * Initialize borrow options
-     */
-     iniBorrow(){
-        if(this.config.powerup){
-            const asset = stringToAsset(this.config.powerup.max_payment)
-            if(asset.amount != BigInt(0) && typeof asset.symbol.precision != 'number' && asset.symbol.name.length > 0){
-                throw('Wrong definition of lend.max_payment')
-            }
-            if(this.config.eos.network == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906'){
-                if(this.config.powerup.contract != 'eosio'){
-                    throw('Wrong powerup contract')
-                }
-                if(this.config.powerup.paymenttoken != 'eosio.token'){
-                    throw('Wrong system token symbol for powerup')
-                }
-                if(asset.symbol.name != 'EOS'){
-                    throw('Wrong token symbol of powerup.max_payment')
-                }
-                if(asset.symbol.precision != 4){
-                    throw('Wrong token precision of powerup.max_payment')
-                }
-            }
-            this.dayCalculator.max_payment = stringToAsset(this.config.powerup.max_payment)
-        }
-    }
-
-    /**
-     * Send a message to a telegram account
-     * @param msg Message
-     */
-     async logViaBot(msg: string, markdown: boolean = false, no_convert?: boolean) {
-        console.log(msg)
-        if(this.telegram.bot){
-            for (let id of this.telegram.statusIds) {
-                await this.telegram.bot.sendMessage(id, no_convert === true? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
-            }
-        }
-    }
-
-    /**
-     * Send a message to telegram accounts which are marked for error log
-     * @param msg 
-     * @param markdown 
-     */
-    async logError(msg: string, markdown: boolean = false, no_convert?: boolean){
-        console.error(msg)
-        if(this.telegram.bot && this.telegram.errorIds.length > 0){
-            for (let id of this.telegram.errorIds) {
-                await this.telegram.bot.sendMessage(id, no_convert === true? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
-            }
-        }
-    }
-    /**
-     * Send a message to telegram accounts which are marked to receive messages about payed costs
-     * @param msg 
-     * @param markdown 
-     */
-    async logCosts(msg: string, markdown: boolean = false, no_convert?: boolean){
-        console.error(msg)
-        if(this.telegram.bot && this.telegram.costsIds.length > 0){
-            for (let id of this.telegram.costsIds) {
-                await this.telegram.bot.sendMessage(id, no_convert === true? msg : stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
-            }
         }
     }
 
@@ -272,6 +178,7 @@ class EthOracle {
                 console.log('Wrong chain id', chain_id)
                 return false
             }
+            
             if (amount == BigInt(0)) {
                 console.log('Tokens are less than or equal to 0')
                 return false
@@ -308,7 +215,7 @@ class EthOracle {
                 const receipt = await this.eth_api.getProvider().getTransactionReceipt(entry.transactionHash)
                 
                 if(receipt){
-                    // CHeck amount of block confirmations
+                    // Check amount of block confirmations
                     const overConfs = receipt.confirmations - this.blocksToWait
                     if (overConfs > 0) {
                         let ep = this.eth_api.getEndpoint()
@@ -391,7 +298,7 @@ class EthOracle {
 
             // Continue this event if it was marked as removed
             if(entry.removed){
-                this.logError(`Claimed event with trx hash ${entry.transactionHash} got removed and will be skipped by ${this.config.eos.oracleAccount} on ${this.config.eth.network} ❌`)
+                this.telegram.logError(`Claimed event with trx hash ${entry.transactionHash} got removed and will be skipped by ${this.config.eos.oracleAccount} on ${this.config.eth.network} ❌`)
                 continue
             }
 
@@ -409,7 +316,7 @@ class EthOracle {
             // Send transaction on eosio chain
             const eos_res = await this.sendTransaction(actions, trxBroadcast)
             if(eos_res === false){
-                this.logError(`Skip sending claimed of id ${eosioData.id} to eosio chain by ${this.config.eos.oracleAccount} from ${this.config.eth.network} ❌`)
+                this.telegram.logError(`Skip sending claimed of id ${eosioData.id} to eosio chain by ${this.config.eos.oracleAccount} from ${this.config.eth.network} ❌`)
             } else if(eos_res === true){
                 console.log(`Id ${eosioData.id} is already claimed, account 0x${eosioData.to_eth.substring(0, 40)}, quantity ${eosioData.quantity} ✔️`)
             } else {
@@ -425,9 +332,13 @@ class EthOracle {
      * @param trxBroadcast Boolean to broadcast a transaction
      * @returns False if it fails, true if a transaction was already marked as claimed or the object of the transaction result
      */
-    async sendTransaction(actions: any, trxBroadcast: boolean = true){
+    async sendTransaction(actions: Action[], trxBroadcast: boolean = true){
+        let tooManyFailed = false
         for(let tries = 0; tries < this.minTrySend; tries++){
             try {
+                // Buy CPU and NET resources if needed
+                this.rsManager.check(this.eos_api)
+                // Send transaction
                 const eos_res = await this.eos_api.getAPI().transact({ actions }, { 
                     blocksBehind: 3, 
                     expireSeconds: 30, 
@@ -450,7 +361,9 @@ class EthOracle {
                     }
                 }
                 
-                console.error(`Error while sending to eosio chain with ${this.eos_api.getEndpoint()}: ${error} ❌\n${String(e)}`)
+                console.error(`Error while sending transaction to ${actions.length > 0? actions[0].account: 'unkown'} on ${this.config.eos.network} chain with ${this.eos_api.getEndpoint()}: ${error} ❌\n${String(e)}`)
+                console.log('----actions', actions);
+                
 
                 if (e instanceof RpcError){
                     if('code' in e.json && 'error' in e.json && 'code' in e.json.error){
@@ -458,11 +371,19 @@ class EthOracle {
                             // case 3010004: break          // Unauthorized
                             // case 3080001: break          // RAM exceeded
                             case 3080002:                   // NET exceeded
-                                this.borrowResources(false, true)
-                                break
+                                console.log('Borrow NET')
+                                this.rsManager.borrow(this.eos_api, false, true)
+                            break
                             case 3080004:                   // CPU exceeded
-                                this.borrowResources(true, false)
-                                break
+                                console.log('Borrow CPU', e.message)
+                                if(e.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1){
+                                    // Blocked by this endpoint because of too many failed transactions
+                                    console.log(`Got blocked by ${this.eos_api.getEndpoint()}`)
+                                    tooManyFailed = true
+                                } else {
+                                    this.rsManager.borrow(this.eos_api, true, false)
+                                }
+                            break
                         }
                     }
                 }
@@ -471,76 +392,11 @@ class EthOracle {
                 await sleep(1000)
             }
         }
+        if(tooManyFailed){
+            this.telegram.logViaBot('Sleep for 24h, because endpoints blocked further transactions')
+            await sleep(24*3600*1000)
+        }
         return false
-    }
-
-    /**
-     * Borrow resources
-     * @param cpu True to borrow CPU
-     * @param net True to borrow NET
-     */
-     async borrowResources(cpu = false, net = false) {
-        if(!this.config.powerup){
-            return
-        }
-        if(!cpu && !net){
-            console.log('No resource to borrow')
-            return
-        }
-        const powerup = this.config.powerup
-        
-        let max_payment: bigint
-        if((Date.now() - this.dayCalculator.fromTime) >= (24*3600000)){
-            this.dayCalculator.fromTime = Date.now()
-            this.dayCalculator.currentCosts = BigInt(0)
-            max_payment = this.dayCalculator.max_payment.amount
-        } else {
-            max_payment = this.dayCalculator.max_payment.amount - this.dayCalculator.currentCosts
-        }
-        const symbol = this.dayCalculator.max_payment.symbol
-        
-        if(max_payment <= 0){
-            await this.logCosts(`🚫 Max tokens per day is not enough to borrow ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''} by ${this.config.eos.oracleAccount} on ${this.config.eos.network}`, true)
-            return
-        }
-        try{
-            const assetBefore = stringToAsset((await this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS'))[0])
-
-            const result = await this.eos_api.getAPI().transact({
-                actions: [{
-                    account: 'eosio',
-                    name: 'powerup',
-                    authorization: [{
-                        actor: this.config.eos.oracleAccount,
-                        permission: this.config.eos.oraclePermission || 'active',
-                    }],
-                    data: {
-                        cpu_frac: cpu? powerup.cpu_frac : 0,
-                        net_frac: net? powerup.net_frac : 0,
-                        days: powerup.days,
-                        max_payment: assetdataToString(max_payment, symbol.name, symbol.precision),
-                        payer: this.config.eos.oracleAccount,
-                        receiver: this.config.eos.oracleAccount
-                    },
-                }]
-            }, {
-                blocksBehind: 3,
-                expireSeconds: 30,
-            })
-            await sleep(5000)
-            const assetAfter = stringToAsset((await this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS'))[0])
-            const paymedAmount = assetBefore.amount - assetAfter.amount
-            let paid : string
-            if(paymedAmount < 0 || paymedAmount > max_payment){
-                this.dayCalculator.currentCosts += paymedAmount
-                paid = assetdataToString(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision)
-            } else {
-                paid = 'an unkown amount of tokens'
-            }
-            await this.logCosts(`Borrowed ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''}for ${paid} by ${this.config.eos.oracleAccount} on ${this.config.eos.network}`, true)
-        } catch (e){
-            await this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ${String(e)}`, true)
-        }
     }
 
     /**
@@ -567,7 +423,7 @@ class EthOracle {
             if(eosioData === false){
                 console.log('Continue');
                 continue
-            }
+            }            
 
             // Check id is equal to recipient chain
             if(this.config.eos.id !== undefined && eosioData.chain_id !== Number(this.config.eos.id)){
@@ -606,7 +462,7 @@ class EthOracle {
             // Send transaction on eosio chain
             const eos_res = await this.sendTransaction(actions, trxBroadcast)
             if(eos_res === false){
-                console.log(`Skip sending teleport to ${eosioData.to} with ref ${eosioData.ref} and quantity of ${eosioData.quantity} ❌`)
+                this.telegram.logError(`Skip sending teleport to ${eosioData.to} with ref ${eosioData.ref} and quantity of ${eosioData.quantity} ❌`)
             } else if(eos_res === true){
                 console.log(`Oracle has already approved teleport to ${eosioData.to} with ref ${eosioData.ref} and quantity of ${eosioData.quantity} ✔️`)
             } else {
@@ -665,7 +521,7 @@ class EthOracle {
      * @param trxBroadcast False if transactions should not be broadcasted (not submitted to the block chain)
      */
     async run(start_ref: 'latest' | number, trxBroadcast: boolean = true, waitCycle = 30){
-        this.logViaBot(`Starting *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 🏃`, true)
+        this.telegram.logViaBot(`Starting *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 🏃`, true)
         let from_block: number | undefined
         this.running = true
         try{
@@ -747,10 +603,10 @@ class EthOracle {
                 await this.eos_api.nextEndpoint()
             }
         } catch(e){
-            await this.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network}. ${String(e)}`)
+            await this.telegram.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network}. ${String(e)}`)
         }
-        await this.logViaBot(`Thread closed of *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 💀`, true)
-        if(this.telegram.bot){
+        await this.telegram.logViaBot(`Thread closed of *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 💀`, true)
+        if(this.telegram.isTelegram()){
             await sleep(5000)   // Wait some seconds to finsih the sending of telegram messages for real
         }
     }

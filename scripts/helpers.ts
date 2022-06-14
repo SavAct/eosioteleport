@@ -114,34 +114,3 @@ export const WaitWithAnimation = async (s: number, info: string = '') => {
         await sleep(s*1000)
     }
 }
-
-
-const rpMarkDown = [
-    { reg: /\\/g, repl: '\\' },  
-    { reg: /\*/g, repl: '\\*' },
-    { reg: /\_/g, repl: '\\_' },
-    { reg: /\./g, repl: '\\.' },
-    { reg: /\!/g, repl: '\\!' },
-    { reg: /\+/g, repl: '\\+' },
-    { reg: /\-/g, repl: '\\-' },
-    { reg: /\`/g, repl: '\\`' },
-    { reg: /#/g, repl: '\\#' },
-    { reg: /\//g, repl: '\\/' },
-    { reg: /\{/g, repl: '\\{' },
-    { reg: /\}/g, repl: '\\}' },
-    { reg: /\(/g, repl: '\\(' },
-    { reg: /\)/g, repl: '\\)' },
-    { reg: /\[/g, repl: '\\[' },
-    { reg: /\]/g, repl: '\\]' },
-    { reg: /\</g, repl: '&lt;' },
-    { reg: /\>/g, repl: '&gt;' },
-]
-
-/**
- * Replace special characters of a string into markdown 
- * @param str Raw string
- * @returns Markdown string
- */
-export const stringToMarkDown = (str: string)=>{
-    return rpMarkDown.reduce((str, replacement) => { return str.replace(replacement.reg, replacement.repl ) }, str)
-}

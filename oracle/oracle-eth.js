@@ -59,20 +59,15 @@ var yargs_1 = __importDefault(require("yargs"));
 var eosjs_jssig_1 = require("eosjs/dist/eosjs-jssig");
 var EndpointSwitcher_1 = require("./EndpointSwitcher");
 var helpers_1 = require("../scripts/helpers");
-var node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
 var eosjs_1 = require("eosjs");
+var TelegramMesseger_1 = require("./TelegramMesseger");
+var ResourcenManager_1 = require("./ResourcenManager");
 var EthOracle = /** @class */ (function () {
     function EthOracle(config, signatureProvider) {
         this.config = config;
         this.signatureProvider = signatureProvider;
         this.running = false;
         this.minTrySend = 3;
-        this.dayCalculator = {
-            currentCosts: BigInt(0),
-            fromTime: 0,
-            max_payment: { amount: BigInt(0), symbol: { name: '', precision: 0 } }
-        };
-        this.telegram = { bot: undefined, statusIds: [], errorIds: [], costsIds: [] };
         // Standardise the net id
         this.config.eos.netId = this.config.eos.netId.toLowerCase();
         if (this.config.eos.netId[1] == 'x') {
@@ -83,8 +78,8 @@ var EthOracle = /** @class */ (function () {
         this.blocks_file_name = ".oracle_".concat(configFile.eth.network, "_block-").concat(configFile.eth.oracleAccount);
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length);
         // Initialize the telegram bot and lend options
-        this.iniBot();
-        this.iniBorrow();
+        this.telegram = new TelegramMesseger_1.TelegramMessenger(config.telegram);
+        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram);
         // Create interfaces for eosio and eth chains
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eth_api = new EndpointSwitcher_1.EthApi(this.config.eth.netId, this.config.eth.endpoints);
@@ -103,142 +98,6 @@ var EthOracle = /** @class */ (function () {
                 this.teleport_logEvent = EthOracle.version_v1.teleport;
         }
     }
-    /**
-     * Initialize the telegram bot
-     */
-    EthOracle.prototype.iniBot = function () {
-        if (this.config.telegram) {
-            if (typeof this.config.telegram.statusIds != 'object') {
-                console.error('Use the telegram id provider to get you personal contactId and store it in the config file');
-                process.exit(1);
-            }
-            else {
-                this.telegram.statusIds = this.config.telegram.statusIds;
-                if (this.config.telegram.errorIds) {
-                    this.telegram.errorIds = this.config.telegram.errorIds;
-                }
-            }
-            this.telegram.bot = new node_telegram_bot_api_1.default(this.config.telegram.privateToken, { polling: false });
-        }
-    };
-    /**
-     * Initialize borrow options
-     */
-    EthOracle.prototype.iniBorrow = function () {
-        if (this.config.powerup) {
-            var asset = (0, helpers_1.stringToAsset)(this.config.powerup.max_payment);
-            if (asset.amount != BigInt(0) && typeof asset.symbol.precision != 'number' && asset.symbol.name.length > 0) {
-                throw ('Wrong definition of lend.max_payment');
-            }
-            if (this.config.eos.network == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906') {
-                if (this.config.powerup.contract != 'eosio') {
-                    throw ('Wrong powerup contract');
-                }
-                if (this.config.powerup.paymenttoken != 'eosio.token') {
-                    throw ('Wrong system token symbol for powerup');
-                }
-                if (asset.symbol.name != 'EOS') {
-                    throw ('Wrong token symbol of powerup.max_payment');
-                }
-                if (asset.symbol.precision != 4) {
-                    throw ('Wrong token precision of powerup.max_payment');
-                }
-            }
-            this.dayCalculator.max_payment = (0, helpers_1.stringToAsset)(this.config.powerup.max_payment);
-        }
-    };
-    /**
-     * Send a message to a telegram account
-     * @param msg Message
-     */
-    EthOracle.prototype.logViaBot = function (msg, markdown, no_convert) {
-        if (markdown === void 0) { markdown = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _i, _a, id;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        console.log(msg);
-                        if (!this.telegram.bot) return [3 /*break*/, 4];
-                        _i = 0, _a = this.telegram.statusIds;
-                        _b.label = 1;
-                    case 1:
-                        if (!(_i < _a.length)) return [3 /*break*/, 4];
-                        id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
-                    case 2:
-                        _b.sent();
-                        _b.label = 3;
-                    case 3:
-                        _i++;
-                        return [3 /*break*/, 1];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Send a message to telegram accounts which are marked for error log
-     * @param msg
-     * @param markdown
-     */
-    EthOracle.prototype.logError = function (msg, markdown, no_convert) {
-        if (markdown === void 0) { markdown = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _i, _a, id;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        console.error(msg);
-                        if (!(this.telegram.bot && this.telegram.errorIds.length > 0)) return [3 /*break*/, 4];
-                        _i = 0, _a = this.telegram.errorIds;
-                        _b.label = 1;
-                    case 1:
-                        if (!(_i < _a.length)) return [3 /*break*/, 4];
-                        id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
-                    case 2:
-                        _b.sent();
-                        _b.label = 3;
-                    case 3:
-                        _i++;
-                        return [3 /*break*/, 1];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Send a message to telegram accounts which are marked to receive messages about payed costs
-     * @param msg
-     * @param markdown
-     */
-    EthOracle.prototype.logCosts = function (msg, markdown, no_convert) {
-        if (markdown === void 0) { markdown = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _i, _a, id;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        console.error(msg);
-                        if (!(this.telegram.bot && this.telegram.costsIds.length > 0)) return [3 /*break*/, 4];
-                        _i = 0, _a = this.telegram.costsIds;
-                        _b.label = 1;
-                    case 1:
-                        if (!(_i < _a.length)) return [3 /*break*/, 4];
-                        id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
-                    case 2:
-                        _b.sent();
-                        _b.label = 3;
-                    case 3:
-                        _i++;
-                        return [3 /*break*/, 1];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
     /**
      * Get object of the data of an "claimed"-event on eth chain
      * @param data "claimed"-event data
@@ -462,7 +321,7 @@ var EthOracle = /** @class */ (function () {
                         }
                         // Continue this event if it was marked as removed
                         if (entry.removed) {
-                            this.logError("Claimed event with trx hash ".concat(entry.transactionHash, " got removed and will be skipped by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, " \u274C"));
+                            this.telegram.logError("Claimed event with trx hash ".concat(entry.transactionHash, " got removed and will be skipped by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, " \u274C"));
                             return [3 /*break*/, 7];
                         }
                         actions = [{
@@ -478,7 +337,7 @@ var EthOracle = /** @class */ (function () {
                     case 6:
                         eos_res = _b.sent();
                         if (eos_res === false) {
-                            this.logError("Skip sending claimed of id ".concat(eosioData.id, " to eosio chain by ").concat(this.config.eos.oracleAccount, " from ").concat(this.config.eth.network, " \u274C"));
+                            this.telegram.logError("Skip sending claimed of id ".concat(eosioData.id, " to eosio chain by ").concat(this.config.eos.oracleAccount, " from ").concat(this.config.eth.network, " \u274C"));
                         }
                         else if (eos_res === true) {
                             console.log("Id ".concat(eosioData.id, " is already claimed, account 0x").concat(eosioData.to_eth.substring(0, 40), ", quantity ").concat(eosioData.quantity, " \u2714\uFE0F"));
@@ -519,10 +378,11 @@ var EthOracle = /** @class */ (function () {
     EthOracle.prototype.sendTransaction = function (actions, trxBroadcast) {
         if (trxBroadcast === void 0) { trxBroadcast = true; }
         return __awaiter(this, void 0, void 0, function () {
-            var tries, eos_res, e_3, error, s;
+            var tooManyFailed, tries, eos_res, e_3, error, s;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
+                        tooManyFailed = false;
                         tries = 0;
                         _a.label = 1;
                     case 1:
@@ -530,6 +390,8 @@ var EthOracle = /** @class */ (function () {
                         _a.label = 2;
                     case 2:
                         _a.trys.push([2, 4, , 7]);
+                        // Buy CPU and NET resources if needed
+                        this.rsManager.check(this.eos_api);
                         return [4 /*yield*/, this.eos_api.getAPI().transact({ actions: actions }, {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
@@ -554,17 +416,27 @@ var EthOracle = /** @class */ (function () {
                                 return [2 /*return*/, true];
                             }
                         }
-                        console.error("Error while sending to eosio chain with ".concat(this.eos_api.getEndpoint(), ": ").concat(error, " \u274C\n").concat(String(e_3)));
+                        console.error("Error while sending transaction to ".concat(actions.length > 0 ? actions[0].account : 'unkown', " on ").concat(this.config.eos.network, " chain with ").concat(this.eos_api.getEndpoint(), ": ").concat(error, " \u274C\n").concat(String(e_3)));
+                        console.log('----actions', actions);
                         if (e_3 instanceof eosjs_1.RpcError) {
                             if ('code' in e_3.json && 'error' in e_3.json && 'code' in e_3.json.error) {
                                 switch (e_3.json.error.code) {
                                     // case 3010004: break          // Unauthorized
                                     // case 3080001: break          // RAM exceeded
                                     case 3080002: // NET exceeded
-                                        this.borrowResources(false, true);
+                                        console.log('Borrow NET');
+                                        this.rsManager.borrow(this.eos_api, false, true);
                                         break;
                                     case 3080004: // CPU exceeded
-                                        this.borrowResources(true, false);
+                                        console.log('Borrow CPU', e_3.message);
+                                        if (e_3.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1) {
+                                            // Blocked by this endpoint because of too many failed transactions
+                                            console.log("Got blocked by ".concat(this.eos_api.getEndpoint()));
+                                            tooManyFailed = true;
+                                        }
+                                        else {
+                                            this.rsManager.borrow(this.eos_api, true, false);
+                                        }
                                         break;
                                 }
                             }
@@ -579,102 +451,14 @@ var EthOracle = /** @class */ (function () {
                     case 7:
                         tries++;
                         return [3 /*break*/, 1];
-                    case 8: return [2 /*return*/, false];
-                }
-            });
-        });
-    };
-    /**
-     * Borrow resources
-     * @param cpu True to borrow CPU
-     * @param net True to borrow NET
-     */
-    EthOracle.prototype.borrowResources = function (cpu, net) {
-        if (cpu === void 0) { cpu = false; }
-        if (net === void 0) { net = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var powerup, max_payment, symbol, assetBefore, _a, result, assetAfter, _b, paymedAmount, paid, e_4;
-            return __generator(this, function (_c) {
-                switch (_c.label) {
-                    case 0:
-                        if (!this.config.powerup) {
-                            return [2 /*return*/];
-                        }
-                        if (!cpu && !net) {
-                            console.log('No resource to borrow');
-                            return [2 /*return*/];
-                        }
-                        powerup = this.config.powerup;
-                        if ((Date.now() - this.dayCalculator.fromTime) >= (24 * 3600000)) {
-                            this.dayCalculator.fromTime = Date.now();
-                            this.dayCalculator.currentCosts = BigInt(0);
-                            max_payment = this.dayCalculator.max_payment.amount;
-                        }
-                        else {
-                            max_payment = this.dayCalculator.max_payment.amount - this.dayCalculator.currentCosts;
-                        }
-                        symbol = this.dayCalculator.max_payment.symbol;
-                        if (!(max_payment <= 0)) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.logCosts("\uD83D\uDEAB Max tokens per day is not enough to borrow ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', " by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network), true)];
-                    case 1:
-                        _c.sent();
-                        return [2 /*return*/];
-                    case 2:
-                        _c.trys.push([2, 8, , 10]);
-                        _a = helpers_1.stringToAsset;
-                        return [4 /*yield*/, this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS')];
-                    case 3:
-                        assetBefore = _a.apply(void 0, [(_c.sent())[0]]);
-                        return [4 /*yield*/, this.eos_api.getAPI().transact({
-                                actions: [{
-                                        account: 'eosio',
-                                        name: 'powerup',
-                                        authorization: [{
-                                                actor: this.config.eos.oracleAccount,
-                                                permission: this.config.eos.oraclePermission || 'active',
-                                            }],
-                                        data: {
-                                            cpu_frac: cpu ? powerup.cpu_frac : 0,
-                                            net_frac: net ? powerup.net_frac : 0,
-                                            days: powerup.days,
-                                            max_payment: (0, helpers_1.assetdataToString)(max_payment, symbol.name, symbol.precision),
-                                            payer: this.config.eos.oracleAccount,
-                                            receiver: this.config.eos.oracleAccount
-                                        },
-                                    }]
-                            }, {
-                                blocksBehind: 3,
-                                expireSeconds: 30,
-                            })];
-                    case 4:
-                        result = _c.sent();
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
-                    case 5:
-                        _c.sent();
-                        _b = helpers_1.stringToAsset;
-                        return [4 /*yield*/, this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS')];
-                    case 6:
-                        assetAfter = _b.apply(void 0, [(_c.sent())[0]]);
-                        paymedAmount = assetBefore.amount - assetAfter.amount;
-                        paid = void 0;
-                        if (paymedAmount < 0 || paymedAmount > max_payment) {
-                            this.dayCalculator.currentCosts += paymedAmount;
-                            paid = (0, helpers_1.assetdataToString)(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision);
-                        }
-                        else {
-                            paid = 'an unkown amount of tokens';
-                        }
-                        return [4 /*yield*/, this.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(paid, " by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network), true)];
-                    case 7:
-                        _c.sent();
-                        return [3 /*break*/, 10];
                     case 8:
-                        e_4 = _c.sent();
-                        return [4 /*yield*/, this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(String(e_4)), true)];
+                        if (!tooManyFailed) return [3 /*break*/, 10];
+                        this.telegram.logViaBot('Sleep for 24h, because endpoints blocked further transactions');
+                        return [4 /*yield*/, (0, helpers_1.sleep)(24 * 3600 * 1000)];
                     case 9:
-                        _c.sent();
-                        return [3 /*break*/, 10];
-                    case 10: return [2 /*return*/];
+                        _a.sent();
+                        _a.label = 10;
+                    case 10: return [2 /*return*/, false];
                 }
             });
         });
@@ -686,10 +470,10 @@ var EthOracle = /** @class */ (function () {
      * @param trxBroadcast False if the transaction should not be broadcasted (not submitted to the block chain)
      */
     EthOracle.prototype.process_teleported = function (from_block, to_block, trxBroadcast) {
-        var e_5, _a;
+        var e_4, _a;
         if (trxBroadcast === void 0) { trxBroadcast = true; }
         return __awaiter(this, void 0, void 0, function () {
-            var query, res, res_2, res_2_1, entry, decodedData, eosioData, actions, eos_res, e_5_1;
+            var query, res, res_2, res_2_1, entry, decodedData, eosioData, actions, eos_res, e_4_1;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
@@ -753,7 +537,7 @@ var EthOracle = /** @class */ (function () {
                     case 6:
                         eos_res = _b.sent();
                         if (eos_res === false) {
-                            console.log("Skip sending teleport to ".concat(eosioData.to, " with ref ").concat(eosioData.ref, " and quantity of ").concat(eosioData.quantity, " \u274C"));
+                            this.telegram.logError("Skip sending teleport to ".concat(eosioData.to, " with ref ").concat(eosioData.ref, " and quantity of ").concat(eosioData.quantity, " \u274C"));
                         }
                         else if (eos_res === true) {
                             console.log("Oracle has already approved teleport to ".concat(eosioData.to, " with ref ").concat(eosioData.ref, " and quantity of ").concat(eosioData.quantity, " \u2714\uFE0F"));
@@ -765,8 +549,8 @@ var EthOracle = /** @class */ (function () {
                     case 7: return [3 /*break*/, 3];
                     case 8: return [3 /*break*/, 15];
                     case 9:
-                        e_5_1 = _b.sent();
-                        e_5 = { error: e_5_1 };
+                        e_4_1 = _b.sent();
+                        e_4 = { error: e_4_1 };
                         return [3 /*break*/, 15];
                     case 10:
                         _b.trys.push([10, , 13, 14]);
@@ -777,7 +561,7 @@ var EthOracle = /** @class */ (function () {
                         _b.label = 12;
                     case 12: return [3 /*break*/, 14];
                     case 13:
-                        if (e_5) throw e_5.error;
+                        if (e_4) throw e_4.error;
                         return [7 /*endfinally*/];
                     case 14: return [7 /*endfinally*/];
                     case 15: return [2 /*return*/];
@@ -812,7 +596,7 @@ var EthOracle = /** @class */ (function () {
      */
     EthOracle.prototype.getLatestBlock = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var tries, block, e_6;
+            var tries, block, e_5;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -828,7 +612,7 @@ var EthOracle = /** @class */ (function () {
                         block = _a.sent();
                         return [2 /*return*/, block.number];
                     case 4:
-                        e_6 = _a.sent();
+                        e_5 = _a.sent();
                         if (!(tries >= this.eth_api.get_EndpointAmount())) return [3 /*break*/, 5];
                         console.log('Could not get latest block by any eth endpoint ❌');
                         return [2 /*return*/, undefined];
@@ -859,11 +643,11 @@ var EthOracle = /** @class */ (function () {
         if (trxBroadcast === void 0) { trxBroadcast = true; }
         if (waitCycle === void 0) { waitCycle = 30; }
         return __awaiter(this, void 0, void 0, function () {
-            var from_block, tries, latest_block, err_1, to_block, e_7, e_8;
+            var from_block, tries, latest_block, err_1, to_block, e_6, e_7;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        this.logViaBot("Starting *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83C\uDFC3"), true);
+                        this.telegram.logViaBot("Starting *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83C\uDFC3"), true);
                         this.running = true;
                         _a.label = 1;
                     case 1:
@@ -963,8 +747,8 @@ var EthOracle = /** @class */ (function () {
                         tries = 0;
                         return [3 /*break*/, 26];
                     case 22:
-                        e_7 = _a.sent();
-                        console.error('⚡️ ' + e_7.message);
+                        e_6 = _a.sent();
+                        console.error('⚡️ ' + e_6.message);
                         tries++;
                         if (!(tries < 12)) return [3 /*break*/, 24];
                         console.error('Try again in 5 seconds');
@@ -972,7 +756,7 @@ var EthOracle = /** @class */ (function () {
                     case 23:
                         _a.sent();
                         return [3 /*break*/, 25];
-                    case 24: throw (e_7.message);
+                    case 24: throw (e_6.message);
                     case 25: return [3 /*break*/, 26];
                     case 26: 
                     // Select the next endpoint to distribute the requests
@@ -983,15 +767,15 @@ var EthOracle = /** @class */ (function () {
                         return [3 /*break*/, 4];
                     case 28: return [3 /*break*/, 31];
                     case 29:
-                        e_8 = _a.sent();
-                        return [4 /*yield*/, this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(String(e_8)))];
+                        e_7 = _a.sent();
+                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(String(e_7)))];
                     case 30:
                         _a.sent();
                         return [3 /*break*/, 31];
-                    case 31: return [4 /*yield*/, this.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true)];
+                    case 31: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true)];
                     case 32:
                         _a.sent();
-                        if (!this.telegram.bot) return [3 /*break*/, 34];
+                        if (!this.telegram.isTelegram()) return [3 /*break*/, 34];
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
                     case 33:
                         _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real

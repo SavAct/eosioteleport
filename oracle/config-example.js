@@ -48,5 +48,8 @@ module.exports = {
         cpu_frac: 1000000,       // Fraction of total available CPU time = 10^15 / cpu_frac which will borrowed when needed
         net_frac: 100000,        // Fraction of total available NET time = 10^15 / cpu_frac which will borrowed when needed
         max_payment: '0.2000 EOS',  // Maximum amount which would be paid per day of a running instance (The right number of decimal places is important)
+
+        min_cpu: 1200,           // Rent CPU if available CPU resource is below this number (Powerup may consume arroud 800 CPU)
+        min_net: 500,            // Rent NET if available NET resource is below this number (Powerup may consume arroud 200 NET)
     }
 }

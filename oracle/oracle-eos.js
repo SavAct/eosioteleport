@@ -52,7 +52,8 @@ var ethereumjs_util_1 = require("ethereumjs-util");
 var EndpointSwitcher_1 = require("./EndpointSwitcher");
 var yargs_1 = __importDefault(require("yargs"));
 var helpers_1 = require("../scripts/helpers");
-var node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
+var TelegramMesseger_1 = require("./TelegramMesseger");
+var ResourcenManager_1 = require("./ResourcenManager");
 var EosOracle = /** @class */ (function () {
     function EosOracle(config, signatureProvider, force) {
         this.config = config;
@@ -60,156 +61,11 @@ var EosOracle = /** @class */ (function () {
         this.force = force;
         this.running = false;
         this.irreversible_time = 0;
-        this.dayCalculator = {
-            currentCosts: BigInt(0),
-            fromTime: 0,
-            max_payment: { amount: BigInt(0), symbol: { name: '', precision: 0 } }
-        };
-        this.telegram = { bot: undefined, statusIds: [], errorIds: [], costsIds: [] };
-        this.iniBot();
-        this.iniBorrow();
+        this.telegram = new TelegramMesseger_1.TelegramMessenger(config.telegram);
+        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram);
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: (0, helpers_1.fromHexString)(config.eos.netId.substring(0, 8)) };
     }
-    /**
-     * Initialize the telegram bot
-     */
-    EosOracle.prototype.iniBot = function () {
-        if (this.config.telegram) {
-            if (typeof this.config.telegram.statusIds != 'object') {
-                console.error('Use the telegram id provider to get you personal contactId and store it in the config file');
-                process.exit(1);
-            }
-            else {
-                this.telegram.statusIds = this.config.telegram.statusIds;
-                if (this.config.telegram.errorIds) {
-                    this.telegram.errorIds = this.config.telegram.errorIds;
-                }
-            }
-            if (this.config.telegram.costsIds) {
-                this.telegram.costsIds = this.config.telegram.costsIds;
-            }
-            this.telegram.bot = new node_telegram_bot_api_1.default(this.config.telegram.privateToken, { polling: false });
-        }
-    };
-    /**
-     * Initialize borrow options
-     */
-    EosOracle.prototype.iniBorrow = function () {
-        if (this.config.powerup) {
-            var asset = (0, helpers_1.stringToAsset)(this.config.powerup.max_payment);
-            if (asset.amount != BigInt(0) && typeof asset.symbol.precision != 'number' && asset.symbol.name.length > 0) {
-                throw ('Wrong definition of lend.max_payment');
-            }
-            if (this.config.eos.network == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906') {
-                if (this.config.powerup.contract != 'eosio') {
-                    throw ('Wrong powerup contract');
-                }
-                if (this.config.powerup.paymenttoken != 'eosio.token') {
-                    throw ('Wrong system token symbol for powerup');
-                }
-                if (asset.symbol.name != 'EOS') {
-                    throw ('Wrong token symbol of powerup.max_payment');
-                }
-                if (asset.symbol.precision != 4) {
-                    throw ('Wrong token precision of powerup.max_payment');
-                }
-            }
-            this.dayCalculator.max_payment = (0, helpers_1.stringToAsset)(this.config.powerup.max_payment);
-        }
-    };
-    /**
-     * Send a message to a telegram account
-     * @param msg Message
-     */
-    EosOracle.prototype.logViaBot = function (msg, markdown, no_convert) {
-        if (markdown === void 0) { markdown = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _i, _a, id;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        console.log(msg);
-                        if (!this.telegram.bot) return [3 /*break*/, 4];
-                        _i = 0, _a = this.telegram.statusIds;
-                        _b.label = 1;
-                    case 1:
-                        if (!(_i < _a.length)) return [3 /*break*/, 4];
-                        id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
-                    case 2:
-                        _b.sent();
-                        _b.label = 3;
-                    case 3:
-                        _i++;
-                        return [3 /*break*/, 1];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Send a message to telegram accounts which are marked for error log
-     * @param msg
-     * @param markdown
-     */
-    EosOracle.prototype.logError = function (msg, markdown, no_convert) {
-        if (markdown === void 0) { markdown = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _i, _a, id;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        console.error(msg);
-                        if (!(this.telegram.bot && this.telegram.errorIds.length > 0)) return [3 /*break*/, 4];
-                        _i = 0, _a = this.telegram.errorIds;
-                        _b.label = 1;
-                    case 1:
-                        if (!(_i < _a.length)) return [3 /*break*/, 4];
-                        id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
-                    case 2:
-                        _b.sent();
-                        _b.label = 3;
-                    case 3:
-                        _i++;
-                        return [3 /*break*/, 1];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Send a message to telegram accounts which are marked to receive messages about payed costs
-     * @param msg
-     * @param markdown
-     */
-    EosOracle.prototype.logCosts = function (msg, markdown, no_convert) {
-        if (markdown === void 0) { markdown = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _i, _a, id;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
-                    case 0:
-                        console.error(msg);
-                        if (!(this.telegram.bot && this.telegram.costsIds.length > 0)) return [3 /*break*/, 4];
-                        _i = 0, _a = this.telegram.costsIds;
-                        _b.label = 1;
-                    case 1:
-                        if (!(_i < _a.length)) return [3 /*break*/, 4];
-                        id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : (0, helpers_1.stringToMarkDown)(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
-                    case 2:
-                        _b.sent();
-                        _b.label = 3;
-                    case 3:
-                        _i++;
-                        return [3 /*break*/, 1];
-                    case 4: return [2 /*return*/];
-                }
-            });
-        });
-    };
     /**
      * Send sign a teleport. Repeats itself until a defined amount of tries are reached
      * @param id Teleport id
@@ -219,11 +75,14 @@ var EosOracle = /** @class */ (function () {
     EosOracle.prototype.sendSignAction = function (id, signature, tries) {
         if (tries === void 0) { tries = 0; }
         return __awaiter(this, void 0, void 0, function () {
-            var result, e_1, retry;
+            var result, e_1, retry, tooManyFailed;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 2, , 7]);
+                        _a.trys.push([0, 2, , 11]);
+                        // Buy CPU and NET resources if needed
+                        this.rsManager.check(this.eos_api);
+                        // Send transaction
                         console.log("Teleport id ".concat(id, ", try to send signature ").concat(tries, "."));
                         return [4 /*yield*/, this.eos_api.getAPI().transact({
                                 actions: [{
@@ -245,11 +104,12 @@ var EosOracle = /** @class */ (function () {
                             })];
                     case 1:
                         result = _a.sent();
-                        return [3 /*break*/, 7];
+                        return [3 /*break*/, 11];
                     case 2:
                         e_1 = _a.sent();
                         console.error("\nCaught exception: ".concat(e_1, " \n"));
                         retry = true;
+                        tooManyFailed = false;
                         if (e_1 instanceof eosjs_1.RpcError) {
                             if ('code' in e_1.json && 'error' in e_1.json && 'code' in e_1.json.error) {
                                 switch (e_1.json.error.code) {
@@ -258,10 +118,19 @@ var EosOracle = /** @class */ (function () {
                                         break;
                                     // case 3080001: break          // RAM exceeded
                                     case 3080002: // NET exceeded
-                                        this.borrowResources(false, true);
+                                        console.log('Borrow NET');
+                                        this.rsManager.borrow(this.eos_api, false, true);
                                         break;
                                     case 3080004: // CPU exceeded
-                                        this.borrowResources(true, false);
+                                        console.log('Borrow CPU', e_1.message);
+                                        if (e_1.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1) {
+                                            // Blocked by this endpoint because of too many failed transactions
+                                            console.log("Got blocked by ".concat(this.eos_api.getEndpoint()));
+                                            tooManyFailed = true;
+                                        }
+                                        else {
+                                            this.rsManager.borrow(this.eos_api, true, false);
+                                        }
                                         break;
                                 }
                             }
@@ -274,111 +143,27 @@ var EosOracle = /** @class */ (function () {
                         return [4 /*yield*/, this.sendSignAction(id, signature, tries)];
                     case 4:
                         _a.sent();
-                        return [3 /*break*/, 6];
+                        return [3 /*break*/, 10];
                     case 5:
-                        this.logError("Teleport id ".concat(id, ", skip sign action by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \u274C\n").concat(String(e_1)));
-                        _a.label = 6;
-                    case 6: return [2 /*return*/];
+                        if (!tooManyFailed) return [3 /*break*/, 9];
+                        this.telegram.logViaBot('Sleep for 24h, because endpoints blocked further transactions');
+                        return [4 /*yield*/, (0, helpers_1.sleep)(24 * 3600 * 1000)];
+                    case 6:
+                        _a.sent();
+                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
                     case 7:
+                        _a.sent();
+                        return [4 /*yield*/, this.sendSignAction(id, signature, tries)];
+                    case 8:
+                        _a.sent();
+                        return [3 /*break*/, 10];
+                    case 9:
+                        this.telegram.logError("Teleport id ".concat(id, ", skip sign action by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \u274C\n").concat(String(e_1)));
+                        _a.label = 10;
+                    case 10: return [2 /*return*/];
+                    case 11:
                         console.log("Teleport id ".concat(id, ", successful send sign action. \u2714\uFE0F"));
                         return [2 /*return*/];
-                }
-            });
-        });
-    };
-    /**
-     * Borrow resources
-     * @param cpu True to borrow CPU
-     * @param net True to borrow NET
-     */
-    EosOracle.prototype.borrowResources = function (cpu, net) {
-        if (cpu === void 0) { cpu = false; }
-        if (net === void 0) { net = false; }
-        return __awaiter(this, void 0, void 0, function () {
-            var powerup, max_payment, symbol, assetBefore, _a, result, assetAfter, _b, paymedAmount, paid, e_2;
-            return __generator(this, function (_c) {
-                switch (_c.label) {
-                    case 0:
-                        if (!this.config.powerup) {
-                            return [2 /*return*/];
-                        }
-                        if (!cpu && !net) {
-                            console.log('No resource to borrow');
-                            return [2 /*return*/];
-                        }
-                        powerup = this.config.powerup;
-                        if ((Date.now() - this.dayCalculator.fromTime) >= (24 * 3600000)) {
-                            this.dayCalculator.fromTime = Date.now();
-                            this.dayCalculator.currentCosts = BigInt(0);
-                            max_payment = this.dayCalculator.max_payment.amount;
-                        }
-                        else {
-                            max_payment = this.dayCalculator.max_payment.amount - this.dayCalculator.currentCosts;
-                        }
-                        symbol = this.dayCalculator.max_payment.symbol;
-                        if (!(max_payment <= 0)) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.logCosts("\uD83D\uDEAB Max tokens per day is not enough to borrow ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', " by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network), true)];
-                    case 1:
-                        _c.sent();
-                        return [2 /*return*/];
-                    case 2:
-                        _c.trys.push([2, 8, , 10]);
-                        _a = helpers_1.stringToAsset;
-                        return [4 /*yield*/, this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS')];
-                    case 3:
-                        assetBefore = _a.apply(void 0, [(_c.sent())[0]]);
-                        console.log('try to buy resource');
-                        return [4 /*yield*/, this.eos_api.getAPI().transact({
-                                actions: [{
-                                        account: 'eosio',
-                                        name: 'powerup',
-                                        authorization: [{
-                                                actor: this.config.eos.oracleAccount,
-                                                permission: this.config.eos.oraclePermission || 'active',
-                                            }],
-                                        data: {
-                                            cpu_frac: cpu ? powerup.cpu_frac : 0,
-                                            net_frac: net ? powerup.net_frac : 0,
-                                            days: powerup.days,
-                                            max_payment: (0, helpers_1.assetdataToString)(max_payment, symbol.name, symbol.precision),
-                                            payer: this.config.eos.oracleAccount,
-                                            receiver: this.config.eos.oracleAccount
-                                        },
-                                    }]
-                            }, {
-                                blocksBehind: 3,
-                                expireSeconds: 30,
-                            })];
-                    case 4:
-                        result = _c.sent();
-                        console.log('got result');
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
-                    case 5:
-                        _c.sent();
-                        _b = helpers_1.stringToAsset;
-                        return [4 /*yield*/, this.eos_api.getRPC().get_currency_balance('eosio.token', this.config.eos.oracleAccount, 'EOS')];
-                    case 6:
-                        assetAfter = _b.apply(void 0, [(_c.sent())[0]]);
-                        paymedAmount = assetBefore.amount - assetAfter.amount;
-                        paid = void 0;
-                        if (paymedAmount < 0 || paymedAmount > max_payment) {
-                            this.dayCalculator.currentCosts += paymedAmount;
-                            paid = (0, helpers_1.assetdataToString)(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision);
-                        }
-                        else {
-                            paid = 'an unkown amount of tokens';
-                        }
-                        return [4 /*yield*/, this.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(paid, " by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network), true)];
-                    case 7:
-                        _c.sent();
-                        return [3 /*break*/, 10];
-                    case 8:
-                        e_2 = _c.sent();
-                        return [4 /*yield*/, this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(String(e_2)), true)];
-                    case 9:
-                        _c.sent();
-                        return [3 /*break*/, 10];
-                    case 10: return [2 /*return*/];
                 }
             });
         });
@@ -393,7 +178,7 @@ var EosOracle = /** @class */ (function () {
     EosOracle.prototype.getTableRows = function (lower_bound, limit, json) {
         if (json === void 0) { json = true; }
         return __awaiter(this, void 0, void 0, function () {
-            var retries, teleport_res, gotTeleport, e_3;
+            var retries, teleport_res, gotTeleport, e_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -421,8 +206,8 @@ var EosOracle = /** @class */ (function () {
                         teleport_res = _a.sent();
                         return [3 /*break*/, 6];
                     case 4:
-                        e_3 = _a.sent();
-                        console.log(e_3);
+                        e_2 = _a.sent();
+                        console.log(e_2);
                         return [4 /*yield*/, this.eos_api.nextEndpoint()];
                     case 5:
                         _a.sent();
@@ -552,7 +337,7 @@ var EosOracle = /** @class */ (function () {
      */
     EosOracle.prototype.updateTimes = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var minIrrTime, lowestIrr, epStart, verifications, info, irr_time, irr_block, t, e_4;
+            var minIrrTime, lowestIrr, epStart, verifications, info, irr_time, irr_block, t, e_3;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -596,8 +381,8 @@ var EosOracle = /** @class */ (function () {
                         verifications++;
                         return [3 /*break*/, 8];
                     case 7:
-                        e_4 = _a.sent();
-                        console.log('⚡️ ' + e_4);
+                        e_3 = _a.sent();
+                        console.log('⚡️ ' + e_3);
                         // Get next endpoint and check if all endpoints are already checked
                         this.eos_api.nextEndpoint();
                         if (epStart == this.eos_api.getEndpoint()) {
@@ -691,7 +476,7 @@ var EosOracle = /** @class */ (function () {
                         _b.label = 4;
                     case 4:
                         if (!!isVerifyed) return [3 /*break*/, 5];
-                        this.logError("Teleport id ".concat(item.id, ", skip this one by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \u274C"));
+                        this.telegram.logError("Teleport id ".concat(item.id, ", skip this one by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \u274C"));
                         return [3 /*break*/, 8];
                     case 5: return [4 /*yield*/, EosOracle.signTeleport(logData, this.config.eth.privateKey)
                         // Send signature to eosio chain
@@ -748,10 +533,10 @@ var EosOracle = /** @class */ (function () {
         if (requestAmount === void 0) { requestAmount = 100; }
         if (waitCycle === void 0) { waitCycle = EosOracle.maxWait; }
         return __awaiter(this, void 0, void 0, function () {
-            var signProcessData, e_5;
+            var signProcessData, e_4;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, this.logViaBot("Starting *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83C\uDFC3"), true)
+                    case 0: return [4 /*yield*/, this.telegram.logViaBot("Starting *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83C\uDFC3"), true)
                         // Create an object to change the current id on each run
                     ];
                     case 1:
@@ -780,15 +565,15 @@ var EosOracle = /** @class */ (function () {
                         return [3 /*break*/, 3];
                     case 8: return [3 /*break*/, 11];
                     case 9:
-                        e_5 = _a.sent();
-                        return [4 /*yield*/, this.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(String(e_5)))];
+                        e_4 = _a.sent();
+                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, ". ").concat(String(e_4)))];
                     case 10:
                         _a.sent();
                         return [3 /*break*/, 11];
-                    case 11: return [4 /*yield*/, this.logViaBot("Thread closed of *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDC80"), true)];
+                    case 11: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(this.config.eos.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* \uD83D\uDC80"), true)];
                     case 12:
                         _a.sent();
-                        if (!this.telegram.bot) return [3 /*break*/, 14];
+                        if (!this.telegram.isTelegram()) return [3 /*break*/, 14];
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
                     case 13:
                         _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real

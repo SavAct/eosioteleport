@@ -30,12 +30,7 @@ export interface ConfigType {
         waitCycle?: number,
         blocksToWait?: number,
     },
-    telegram?: {
-        privateToken: string,
-        statusIds?: Array<number>,
-        errorIds?: Array<number>,
-        costsIds?: Array<number>,
-    },
+    telegram?: Telegram,
     powerup?: PowerUp,
 }
 
@@ -46,6 +41,16 @@ export interface PowerUp{
     cpu_frac: number,
     net_frac: number,
     max_payment: string,
+  
+    min_cpu: number,
+    min_net: number,
+}
+
+export interface Telegram{
+    privateToken: string,
+    statusIds?: Array<number>,
+    errorIds?: Array<number>,
+    costsIds?: Array<number>,
 }
 
 export interface TeleportTableEntry{

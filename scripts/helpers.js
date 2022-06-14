@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.stringToMarkDown = exports.WaitWithAnimation = exports.stringToAsset = exports.assetToString = exports.assetdataToString = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
+exports.WaitWithAnimation = exports.stringToAsset = exports.assetToString = exports.assetdataToString = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
 /**
  * Convert an Uint8Array to an hex in string format
  * @param bytes Uint8Array
@@ -177,32 +177,3 @@ var WaitWithAnimation = function (s, info) {
     });
 };
 exports.WaitWithAnimation = WaitWithAnimation;
-var rpMarkDown = [
-    { reg: /\\/g, repl: '\\' },
-    { reg: /\*/g, repl: '\\*' },
-    { reg: /\_/g, repl: '\\_' },
-    { reg: /\./g, repl: '\\.' },
-    { reg: /\!/g, repl: '\\!' },
-    { reg: /\+/g, repl: '\\+' },
-    { reg: /\-/g, repl: '\\-' },
-    { reg: /\`/g, repl: '\\`' },
-    { reg: /#/g, repl: '\\#' },
-    { reg: /\//g, repl: '\\/' },
-    { reg: /\{/g, repl: '\\{' },
-    { reg: /\}/g, repl: '\\}' },
-    { reg: /\(/g, repl: '\\(' },
-    { reg: /\)/g, repl: '\\)' },
-    { reg: /\[/g, repl: '\\[' },
-    { reg: /\]/g, repl: '\\]' },
-    { reg: /\</g, repl: '&lt;' },
-    { reg: /\>/g, repl: '&gt;' },
-];
-/**
- * Replace special characters of a string into markdown
- * @param str Raw string
- * @returns Markdown string
- */
-var stringToMarkDown = function (str) {
-    return rpMarkDown.reduce(function (str, replacement) { return str.replace(replacement.reg, replacement.repl); }, str);
-};
-exports.stringToMarkDown = stringToMarkDown;
