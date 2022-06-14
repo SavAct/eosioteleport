@@ -65,6 +65,7 @@ class EthOracle {
     
     private telegram: TelegramMessenger
     private rsManager: ResourcesManager
+    private blocksPerRequest = 100
     
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider){
         
@@ -99,6 +100,13 @@ class EthOracle {
             default:
                 this.claimed_logEvent = EthOracle.version_v1.claimed
                 this.teleport_logEvent = EthOracle.version_v1.teleport
+        }
+
+        if(config.eth.blocksPerRequest){
+            if(config.eth.blocksPerRequest > 200){
+                console.log('Attention, eth nodes usually do not accept more than 200 blocks per request');
+            }
+            this.blocksPerRequest = config.eth.blocksPerRequest
         }
     }
 
@@ -520,7 +528,7 @@ class EthOracle {
      * @param start_ref Block number to start from. String 'latest' to start from the latest block in block number file
      * @param trxBroadcast False if transactions should not be broadcasted (not submitted to the block chain)
      */
-    async run(start_ref: 'latest' | number, trxBroadcast: boolean = true, waitCycle = 30){
+    async run(start_ref: 'latest' | number | undefined, trxBroadcast: boolean = true, waitCycle = 30){
         this.telegram.logViaBot(`Starting *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 🏃`, true)
         let from_block: number | undefined
         this.running = true
@@ -538,14 +546,19 @@ class EthOracle {
                     }
 
                     // Get block number to start from on this cycle
-                    if (!from_block) {
-                        if (start_ref === 'latest') {
+                    if (from_block == undefined) {
+                        if(start_ref === 'latest'){
+                            from_block = latest_block - 100     // go back 100 blocks from latest
+                            console.log('Start 100 blocks before the latest block.')
+                        } else if (typeof start_ref === 'number') {
+                            from_block = start_ref
+                        } else {
                             try {
                                 from_block = await EthOracle.load_block_number_from_file(this.blocks_file_name)
                                 from_block -= 50                     // for fresh start go back 50 blocks
                                 if(this.config.eth.genesisBlock && this.config.eth.genesisBlock > from_block){
                                     from_block = this.config.eth.genesisBlock
-                                    console.log('Start by genesis block.')
+                                    console.log('Genesis block is higher. Start by genesis block.')
                                 } else {
                                     console.log(`Starting from saved block with additional previous 50 blocks for safety: ${from_block}.`)
                                 }
@@ -559,10 +572,6 @@ class EthOracle {
                                     console.log('Start 100 blocks before the latest block.')
                                 }
                             }
-                        } else if (typeof start_ref === 'number') {
-                                from_block = start_ref
-                        } else {
-                            from_block = this.config.eth.genesisBlock
                         }
                     }
                     if(from_block < 0){
@@ -570,7 +579,7 @@ class EthOracle {
                     }
 
                     // Get the last block number until teleports should be checked on this cycle
-                    let to_block = Math.min(from_block + 100, latest_block)
+                    let to_block = Math.min(from_block + this.blocksPerRequest, latest_block)
 
                     if (from_block <= to_block) {
                         console.log(`Getting events from block ${from_block} to ${to_block}`)
@@ -636,7 +645,7 @@ const argv = yargs
       default: true,
     })
     .help().alias('help', 'h').argv as {
-        block: number,
+        block: number | string,
         waiter: number,
         config: string,
         broadcast: boolean,
@@ -648,7 +657,7 @@ process.title = `oracle-eth ${config_path}`
 const configFile : ConfigType = require(config_path)
 
 // Check and set start parameters
-let startRef: 'latest' | number = 'latest' 
+let startRef: 'latest' | number | undefined = undefined 
 if(typeof argv.block == 'number' || argv.block == 'latest') {
     startRef = argv.block
 } else if(process.env['START_BLOCK']) {

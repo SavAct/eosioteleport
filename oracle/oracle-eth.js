@@ -68,6 +68,7 @@ var EthOracle = /** @class */ (function () {
         this.signatureProvider = signatureProvider;
         this.running = false;
         this.minTrySend = 3;
+        this.blocksPerRequest = 100;
         // Standardise the net id
         this.config.eos.netId = this.config.eos.netId.toLowerCase();
         if (this.config.eos.netId[1] == 'x') {
@@ -96,6 +97,12 @@ var EthOracle = /** @class */ (function () {
             default:
                 this.claimed_logEvent = EthOracle.version_v1.claimed;
                 this.teleport_logEvent = EthOracle.version_v1.teleport;
+        }
+        if (config.eth.blocksPerRequest) {
+            if (config.eth.blocksPerRequest > 200) {
+                console.log('Attention, eth nodes usually do not accept more than 200 blocks per request');
+            }
+            this.blocksPerRequest = config.eth.blocksPerRequest;
         }
     }
     /**
@@ -651,7 +658,7 @@ var EthOracle = /** @class */ (function () {
                         this.running = true;
                         _a.label = 1;
                     case 1:
-                        _a.trys.push([1, 29, , 31]);
+                        _a.trys.push([1, 28, , 30]);
                         return [4 /*yield*/, this.eth_api.nextEndpoint()];
                     case 2:
                         _a.sent();
@@ -661,10 +668,10 @@ var EthOracle = /** @class */ (function () {
                         tries = 0;
                         _a.label = 4;
                     case 4:
-                        if (!this.running) return [3 /*break*/, 28];
+                        if (!this.running) return [3 /*break*/, 27];
                         _a.label = 5;
                     case 5:
-                        _a.trys.push([5, 22, , 26]);
+                        _a.trys.push([5, 21, , 25]);
                         return [4 /*yield*/, this.getLatestBlock()];
                     case 6:
                         latest_block = _a.sent();
@@ -672,24 +679,30 @@ var EthOracle = /** @class */ (function () {
                             console.error('Latest block number is not a number', latest_block);
                             return [2 /*return*/];
                         }
-                        if (!!from_block) return [3 /*break*/, 12];
-                        if (!(start_ref === 'latest')) return [3 /*break*/, 11];
-                        _a.label = 7;
+                        if (!(from_block == undefined)) return [3 /*break*/, 11];
+                        if (!(start_ref === 'latest')) return [3 /*break*/, 7];
+                        from_block = latest_block - 100; // go back 100 blocks from latest
+                        console.log('Start 100 blocks before the latest block.');
+                        return [3 /*break*/, 11];
                     case 7:
-                        _a.trys.push([7, 9, , 10]);
-                        return [4 /*yield*/, EthOracle.load_block_number_from_file(this.blocks_file_name)];
+                        if (!(typeof start_ref === 'number')) return [3 /*break*/, 8];
+                        from_block = start_ref;
+                        return [3 /*break*/, 11];
                     case 8:
+                        _a.trys.push([8, 10, , 11]);
+                        return [4 /*yield*/, EthOracle.load_block_number_from_file(this.blocks_file_name)];
+                    case 9:
                         from_block = _a.sent();
                         from_block -= 50; // for fresh start go back 50 blocks
                         if (this.config.eth.genesisBlock && this.config.eth.genesisBlock > from_block) {
                             from_block = this.config.eth.genesisBlock;
-                            console.log('Start by genesis block.');
+                            console.log('Genesis block is higher. Start by genesis block.');
                         }
                         else {
                             console.log("Starting from saved block with additional previous 50 blocks for safety: ".concat(from_block, "."));
                         }
-                        return [3 /*break*/, 10];
-                    case 9:
+                        return [3 /*break*/, 11];
+                    case 10:
                         err_1 = _a.sent();
                         console.log('Could not get block from file ❌');
                         if (this.config.eth.genesisBlock) {
@@ -700,87 +713,78 @@ var EthOracle = /** @class */ (function () {
                             from_block = latest_block - 100; // go back 100 blocks from latest
                             console.log('Start 100 blocks before the latest block.');
                         }
-                        return [3 /*break*/, 10];
-                    case 10: return [3 /*break*/, 12];
+                        return [3 /*break*/, 11];
                     case 11:
-                        if (typeof start_ref === 'number') {
-                            from_block = start_ref;
-                        }
-                        else {
-                            from_block = this.config.eth.genesisBlock;
-                        }
-                        _a.label = 12;
-                    case 12:
                         if (from_block < 0) {
                             from_block = 0;
                         }
-                        to_block = Math.min(from_block + 100, latest_block);
-                        if (!(from_block <= to_block)) return [3 /*break*/, 16];
+                        to_block = Math.min(from_block + this.blocksPerRequest, latest_block);
+                        if (!(from_block <= to_block)) return [3 /*break*/, 15];
                         console.log("Getting events from block ".concat(from_block, " to ").concat(to_block));
                         return [4 /*yield*/, this.process_claimed(from_block, to_block, trxBroadcast)];
-                    case 13:
+                    case 12:
                         _a.sent();
                         return [4 /*yield*/, this.process_teleported(from_block, to_block, trxBroadcast)];
-                    case 14:
+                    case 13:
                         _a.sent();
                         from_block = to_block; // In next round the current to block is the from block
                         return [4 /*yield*/, EthOracle.save_block_to_file(to_block, this.blocks_file_name)]; // Save last block received
-                    case 15:
+                    case 14:
                         _a.sent(); // Save last block received
-                        return [3 /*break*/, 18];
-                    case 16:
+                        return [3 /*break*/, 17];
+                    case 15:
                         console.log("\u26A1\uFE0F From block ".concat(from_block, " is higher than to block ").concat(to_block));
                         return [4 /*yield*/, (0, helpers_1.sleep)(10000)];
+                    case 16:
+                        _a.sent();
+                        _a.label = 17;
                     case 17:
-                        _a.sent();
-                        _a.label = 18;
-                    case 18:
-                        if (!(latest_block - from_block <= 1000)) return [3 /*break*/, 20];
+                        if (!(latest_block - from_block <= 1000)) return [3 /*break*/, 19];
                         return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitCycle, 'Wait for new blocks...')];
-                    case 19:
+                    case 18:
                         _a.sent();
-                        return [3 /*break*/, 21];
-                    case 20:
+                        return [3 /*break*/, 20];
+                    case 19:
                         console.log("Latest block is ".concat(latest_block, ". Not waiting..."));
-                        _a.label = 21;
-                    case 21:
+                        _a.label = 20;
+                    case 20:
                         tries = 0;
-                        return [3 /*break*/, 26];
-                    case 22:
+                        return [3 /*break*/, 25];
+                    case 21:
                         e_6 = _a.sent();
                         console.error('⚡️ ' + e_6.message);
                         tries++;
-                        if (!(tries < 12)) return [3 /*break*/, 24];
+                        if (!(tries < 12)) return [3 /*break*/, 23];
                         console.error('Try again in 5 seconds');
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
-                    case 23:
+                    case 22:
                         _a.sent();
-                        return [3 /*break*/, 25];
-                    case 24: throw (e_6.message);
-                    case 25: return [3 /*break*/, 26];
-                    case 26: 
+                        return [3 /*break*/, 24];
+                    case 23: throw (e_6.message);
+                    case 24: return [3 /*break*/, 25];
+                    case 25: 
                     // Select the next endpoint to distribute the requests
                     return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 27:
+                    case 26:
                         // Select the next endpoint to distribute the requests
                         _a.sent();
                         return [3 /*break*/, 4];
-                    case 28: return [3 /*break*/, 31];
-                    case 29:
+                    case 27: return [3 /*break*/, 30];
+                    case 28:
                         e_7 = _a.sent();
                         return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(String(e_7)))];
-                    case 30:
+                    case 29:
                         _a.sent();
-                        return [3 /*break*/, 31];
-                    case 31: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true)];
-                    case 32:
+                        return [3 /*break*/, 30];
+                    case 30: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true)];
+                    case 31:
                         _a.sent();
-                        if (!this.telegram.isTelegram()) return [3 /*break*/, 34];
+                        if (!this.telegram.isTelegram()) return [3 /*break*/, 33];
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
-                    case 33:
+                    case 32:
                         _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real
-                        _a.label = 34;
-                    case 34: return [2 /*return*/];
+                        _a.label = 33;
+                    case 33: return [2 /*return*/];
                 }
             });
         });
@@ -841,7 +845,7 @@ var config_path = argv.config || process.env['CONFIG'] || './config';
 process.title = "oracle-eth ".concat(config_path);
 var configFile = require(config_path);
 // Check and set start parameters
-var startRef = 'latest';
+var startRef = undefined;
 if (typeof argv.block == 'number' || argv.block == 'latest') {
     startRef = argv.block;
 }

@@ -29,6 +29,7 @@ export interface ConfigType {
         epVerifications: number,
         waitCycle?: number,
         blocksToWait?: number,
+        blocksPerRequest?: number,  // Should be between 1 and 200
     },
     telegram?: Telegram,
     powerup?: PowerUp,
