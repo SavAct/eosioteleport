@@ -177,7 +177,6 @@ var ResourcesManager = /** @class */ (function () {
                                 receiver: this.account_name
                             },
                         };
-                        console.log('borrow action', action); //-
                         return [4 /*yield*/, eos_api.getAPI().transact({
                                 actions: [action]
                             }, {
@@ -186,7 +185,6 @@ var ResourcesManager = /** @class */ (function () {
                             })];
                     case 6:
                         result = _a.sent();
-                        console.log('got result'); //-
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 7:
                         _a.sent();
@@ -197,11 +195,11 @@ var ResourcesManager = /** @class */ (function () {
                         paymedAmount = assetBefore.amount - assetAfter.amount;
                         paid = void 0;
                         if (paymedAmount < 0 || paymedAmount > max_payment) {
-                            this.dayCalculator.currentCosts += paymedAmount;
-                            paid = (0, helpers_1.assetdataToString)(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision);
+                            paid = 'an unkown amount of tokens';
                         }
                         else {
-                            paid = 'an unkown amount of tokens';
+                            this.dayCalculator.currentCosts += paymedAmount;
+                            paid = (0, helpers_1.assetdataToString)(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision);
                         }
                         return [4 /*yield*/, this.telegram.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(paid, " by ").concat(this.account_name, " on ").concat(this.eosio.network), true)];
                     case 9:

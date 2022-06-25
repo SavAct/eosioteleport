@@ -125,25 +125,22 @@ export class ResourcesManager {
                     receiver: this.account_name
                 },
             }
-console.log('borrow action', action); //-
-
             const result = await eos_api.getAPI().transact({
                 actions: [action]
             }, {
                 blocksBehind: 3,
                 expireSeconds: 30,
             })
-console.log('got result'); //-
             await sleep(5000)
             const afterBalances = await eos_api.getRPC().get_currency_balance(this.config_powerup.paymenttoken, this.account_name, this.dayCalculator.max_payment.symbol.name)
             const assetAfter = stringToAsset(afterBalances[0])
             const paymedAmount = assetBefore.amount - assetAfter.amount
             let paid : string
             if(paymedAmount < 0 || paymedAmount > max_payment){
+                paid = 'an unkown amount of tokens'
+            } else {
                 this.dayCalculator.currentCosts += paymedAmount
                 paid = assetdataToString(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision)
-            } else {
-                paid = 'an unkown amount of tokens'
             }
             await this.telegram.logCosts(`Borrowed ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''}for ${paid} by ${this.account_name} on ${this.eosio.network}`, true)
         } catch (e){
