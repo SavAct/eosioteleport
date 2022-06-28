@@ -78,12 +78,13 @@ var EthOracle = /** @class */ (function () {
         this.blocksToWait = typeof config.eth.blocksToWait == 'number' && config.eth.blocksToWait > EthOracle.MIN_BLOCKS_TO_WAIT ? config.eth.blocksToWait : EthOracle.MIN_BLOCKS_TO_WAIT;
         this.blocks_file_name = ".oracle_".concat(configFile.eth.network, "_block-").concat(configFile.eth.oracleAccount);
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length);
-        // Initialize the telegram bot and lend options
+        // Initialize the telegram bot
         this.telegram = new TelegramMesseger_1.TelegramMessenger(config.telegram);
-        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram);
         // Create interfaces for eosio and eth chains
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eth_api = new EndpointSwitcher_1.EthApi(this.config.eth.netId, this.config.eth.endpoints);
+        // Initialize the lending options
+        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api, false);
         // Set the version specific data
         this.version = 0;
         switch (this.config.version) {
@@ -385,30 +386,36 @@ var EthOracle = /** @class */ (function () {
     EthOracle.prototype.sendTransaction = function (actions, trxBroadcast) {
         if (trxBroadcast === void 0) { trxBroadcast = true; }
         return __awaiter(this, void 0, void 0, function () {
-            var tooManyFailed, tries, eos_res, e_3, error, s;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var tooManyFailed, tries, eos_res, e_3, error, s, _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
                         tooManyFailed = false;
                         tries = 0;
-                        _a.label = 1;
+                        _b.label = 1;
                     case 1:
-                        if (!(tries < this.minTrySend)) return [3 /*break*/, 8];
-                        _a.label = 2;
+                        if (!(tries < this.minTrySend)) return [3 /*break*/, 17];
+                        _b.label = 2;
                     case 2:
-                        _a.trys.push([2, 4, , 7]);
-                        // Buy CPU and NET resources if needed
-                        this.rsManager.check(this.eos_api);
+                        _b.trys.push([2, 6, , 16]);
                         return [4 /*yield*/, this.eos_api.getAPI().transact({ actions: actions }, {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
                                 broadcast: trxBroadcast
                             })];
                     case 3:
-                        eos_res = _a.sent();
-                        return [2 /*return*/, eos_res];
+                        eos_res = _b.sent();
+                        // Lend CPU and NET resources if needed
+                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
                     case 4:
-                        e_3 = _a.sent();
+                        // Lend CPU and NET resources if needed
+                        _b.sent();
+                        return [4 /*yield*/, this.rsManager.check(this.eos_api)];
+                    case 5:
+                        _b.sent();
+                        return [2 /*return*/, eos_res];
+                    case 6:
+                        e_3 = _b.sent();
                         error = 'Unkwon error';
                         if (e_3.message) {
                             s = e_3.message.indexOf(':') + 1;
@@ -424,48 +431,50 @@ var EthOracle = /** @class */ (function () {
                             }
                         }
                         console.error("Error while sending transaction to ".concat(actions.length > 0 ? actions[0].account : 'unkown', " on ").concat(this.config.eos.network, " chain with ").concat(this.eos_api.getEndpoint(), ": ").concat(error, " \u274C\n").concat(String(e_3)));
-                        console.log('----actions', actions);
-                        if (e_3 instanceof eosjs_1.RpcError) {
-                            if ('code' in e_3.json && 'error' in e_3.json && 'code' in e_3.json.error) {
-                                switch (e_3.json.error.code) {
-                                    // case 3010004: break          // Unauthorized
-                                    // case 3080001: break          // RAM exceeded
-                                    case 3080002: // NET exceeded
-                                        console.log('Borrow NET');
-                                        this.rsManager.borrow(this.eos_api, false, true);
-                                        break;
-                                    case 3080004: // CPU exceeded
-                                        console.log('Borrow CPU', e_3.message);
-                                        if (e_3.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1) {
-                                            // Blocked by this endpoint because of too many failed transactions
-                                            console.log("Got blocked by ".concat(this.eos_api.getEndpoint()));
-                                            tooManyFailed = true;
-                                        }
-                                        else {
-                                            this.rsManager.borrow(this.eos_api, true, false);
-                                        }
-                                        break;
-                                }
-                            }
+                        if (!(e_3 instanceof eosjs_1.RpcError)) return [3 /*break*/, 13];
+                        if (!('code' in e_3.json && 'error' in e_3.json && 'code' in e_3.json.error)) return [3 /*break*/, 13];
+                        _a = e_3.json.error.code;
+                        switch (_a) {
+                            case 3080002: return [3 /*break*/, 7];
+                            case 3080004: return [3 /*break*/, 9];
                         }
-                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 5:
-                        _a.sent();
-                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
-                    case 6:
-                        _a.sent();
-                        return [3 /*break*/, 7];
+                        return [3 /*break*/, 13];
                     case 7:
+                        console.log('Borrow NET');
+                        return [4 /*yield*/, this.rsManager.borrow(this.eos_api, false, true)];
+                    case 8:
+                        _b.sent();
+                        return [3 /*break*/, 13];
+                    case 9:
+                        console.log('Borrow CPU', e_3.message);
+                        if (!(e_3.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1)) return [3 /*break*/, 10];
+                        // Blocked by this endpoint because of too many failed transactions
+                        console.log("Got blocked by ".concat(this.eos_api.getEndpoint()));
+                        tooManyFailed = true;
+                        return [3 /*break*/, 12];
+                    case 10: return [4 /*yield*/, this.rsManager.borrow(this.eos_api, true, false)];
+                    case 11:
+                        _b.sent();
+                        _b.label = 12;
+                    case 12: return [3 /*break*/, 13];
+                    case 13: return [4 /*yield*/, this.eos_api.nextEndpoint()];
+                    case 14:
+                        _b.sent();
+                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
+                    case 15:
+                        _b.sent();
+                        return [3 /*break*/, 16];
+                    case 16:
                         tries++;
                         return [3 /*break*/, 1];
-                    case 8:
-                        if (!tooManyFailed) return [3 /*break*/, 10];
+                    case 17:
+                        if (!tooManyFailed) return [3 /*break*/, 19];
                         this.telegram.logViaBot('Sleep for 24h, because endpoints blocked further transactions');
                         return [4 /*yield*/, (0, helpers_1.sleep)(24 * 3600 * 1000)];
-                    case 9:
-                        _a.sent();
-                        _a.label = 10;
-                    case 10: return [2 /*return*/, false];
+                    case 18:
+                        _b.sent();
+                        _b.label = 19;
+                    case 19: return [2 /*return*/, false];
                 }
             });
         });

@@ -12,27 +12,11 @@ import { TextDecoder, TextEncoder } from 'text-encoding'
 import { ecsign, keccak, toRpcSig } from 'ethereumjs-util'
 import { EosApi } from './EndpointSwitcher'
 import { ConfigType, PowerUp, TeleportTableEntry } from './CommonTypes'
-import yargs, { number } from 'yargs'
+import yargs, { check, number } from 'yargs'
 import {sleep, toHexString, fromHexString, WaitWithAnimation, stringToAsset, Asset, assetdataToString} from '../scripts/helpers'
 import { TelegramMessenger } from './TelegramMesseger'
 import { ResourcesManager } from './ResourcenManager'
 
-// /**
-//  * Check if two Uint8Arrays are equal
-//  * @param a Frist array
-//  * @param b Seconf array
-//  * @returns True or false
-//  */
-// function arraysEqual(a: Uint8Array, b: Uint8Array) {
-//     if (a === b) return true
-//     if (a == null || b == null) return false
-//     if (a.length !== b.length) return false
-
-//     for (var i = 0; i < a.length; ++i) {
-//       if (a[i] !== b[i]) return false
-//     }
-//     return true
-//   }
 interface EOSIO_Chain_Data {
     tel_contract: string
     short_net_id: Uint8Array
@@ -51,8 +35,8 @@ class EosOracle {
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider, private force: boolean){
         this.telegram = new TelegramMessenger(config.telegram)
         
-        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram)
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
+        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api)
         this.eosio_data = {tel_contract: config.eos.teleportContract, short_net_id: fromHexString(config.eos.netId.substring(0, 8))}
     }
 
@@ -64,9 +48,6 @@ class EosOracle {
      */
     async sendSignAction(id: number, signature: string, tries = 0){
         try{
-            // Buy CPU and NET resources if needed
-            this.rsManager.check(this.eos_api)
-            
             // Send transaction
             console.log(`Teleport id ${id}, try to send signature ${tries}.`)
             const result = await this.eos_api.getAPI().transact({
@@ -87,6 +68,10 @@ class EosOracle {
                 blocksBehind: 3,
                 expireSeconds: 30,
             })
+
+            // Lend CPU and NET resources if needed
+            await sleep(1000)
+            await this.rsManager.check(this.eos_api)
         } catch (e) {
             console.error(`\nCaught exception: ${e} \n`)
             let retry = true
@@ -100,7 +85,7 @@ class EosOracle {
                         // case 3080001: break          // RAM exceeded
                         case 3080002:                   // NET exceeded
                         console.log('Borrow NET')
-                        this.rsManager.borrow(this.eos_api, false, true)
+                        await this.rsManager.borrow(this.eos_api, false, true)
                         break
                         case 3080004:                   // CPU exceeded
                             console.log('Borrow CPU', e.message)
@@ -109,7 +94,7 @@ class EosOracle {
                                 console.log(`Got blocked by ${this.eos_api.getEndpoint()}`)
                                 tooManyFailed = true
                             } else {
-                                this.rsManager.borrow(this.eos_api, true, false)
+                                await this.rsManager.borrow(this.eos_api, true, false)
                             }
                         break
                     }

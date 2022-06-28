@@ -80,13 +80,15 @@ class EthOracle {
         this.blocks_file_name = `.oracle_${configFile.eth.network}_block-${configFile.eth.oracleAccount}`
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
         
-        // Initialize the telegram bot and lend options
+        // Initialize the telegram bot
         this.telegram = new TelegramMessenger(config.telegram)
-        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram)
-        
+
         // Create interfaces for eosio and eth chains
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.eth_api = new EthApi(this.config.eth.netId, this.config.eth.endpoints)
+        
+        // Initialize the lending options
+        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api, false)
 
         // Set the version specific data
         this.version = 0
@@ -344,14 +346,15 @@ class EthOracle {
         let tooManyFailed = false
         for(let tries = 0; tries < this.minTrySend; tries++){
             try {
-                // Buy CPU and NET resources if needed
-                this.rsManager.check(this.eos_api)
                 // Send transaction
                 const eos_res = await this.eos_api.getAPI().transact({ actions }, { 
                     blocksBehind: 3, 
                     expireSeconds: 30, 
                     broadcast: trxBroadcast 
-                }) as TransactResult                
+                }) as TransactResult
+                // Lend CPU and NET resources if needed
+                await sleep(1000)
+                await this.rsManager.check(this.eos_api)        
                 return eos_res
             } catch (e: any) {
                 let error : string = 'Unkwon error'
@@ -369,9 +372,7 @@ class EthOracle {
                     }
                 }
                 
-                console.error(`Error while sending transaction to ${actions.length > 0? actions[0].account: 'unkown'} on ${this.config.eos.network} chain with ${this.eos_api.getEndpoint()}: ${error} ❌\n${String(e)}`)
-                console.log('----actions', actions);
-                
+                console.error(`Error while sending transaction to ${actions.length > 0? actions[0].account: 'unkown'} on ${this.config.eos.network} chain with ${this.eos_api.getEndpoint()}: ${error} ❌\n${String(e)}`)                
 
                 if (e instanceof RpcError){
                     if('code' in e.json && 'error' in e.json && 'code' in e.json.error){
@@ -380,7 +381,7 @@ class EthOracle {
                             // case 3080001: break          // RAM exceeded
                             case 3080002:                   // NET exceeded
                                 console.log('Borrow NET')
-                                this.rsManager.borrow(this.eos_api, false, true)
+                                await this.rsManager.borrow(this.eos_api, false, true)
                             break
                             case 3080004:                   // CPU exceeded
                                 console.log('Borrow CPU', e.message)
@@ -389,7 +390,7 @@ class EthOracle {
                                     console.log(`Got blocked by ${this.eos_api.getEndpoint()}`)
                                     tooManyFailed = true
                                 } else {
-                                    this.rsManager.borrow(this.eos_api, true, false)
+                                    await this.rsManager.borrow(this.eos_api, true, false)
                                 }
                             break
                         }

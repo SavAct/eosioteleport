@@ -39,10 +39,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ResourcesManager = void 0;
 var helpers_1 = require("../scripts/helpers");
 var ResourcesManager = /** @class */ (function () {
-    function ResourcesManager(config_powerup, eosio, telegram) {
+    /**
+     *
+     * @param config_powerup Config data to buy resources automatically
+     * @param eosio Config data of eosio network
+     * @param telegram Telegram messenger object
+     * @param eos_api EOSIO API object
+     * @param maxDuration False to disable the lending of resources just before a day passes
+     */
+    function ResourcesManager(config_powerup, eosio, telegram, eos_api, maxDuration) {
+        if (maxDuration === void 0) { maxDuration = false; }
         this.config_powerup = config_powerup;
         this.eosio = eosio;
         this.telegram = telegram;
+        this.maxDuration = maxDuration;
+        // Object to store the remaining system tokens per day
         this.dayCalculator = {
             currentCosts: BigInt(0),
             fromTime: 0,
@@ -50,8 +61,14 @@ var ResourcesManager = /** @class */ (function () {
         };
         this.account_name = '';
         this.permission = 'active';
-        this.cpu_available = 0;
-        this.net_available = 0;
+        this.cpu = {
+            available: 0,
+            timeOut: undefined,
+        };
+        this.net = {
+            available: 0,
+            timeOut: undefined,
+        };
         if (config_powerup) {
             this.account_name = eosio.oracleAccount;
             if (eosio.oraclePermission) {
@@ -78,6 +95,8 @@ var ResourcesManager = /** @class */ (function () {
                 }
             }
             this.dayCalculator.max_payment = asset;
+            // Lend resources just before a day passes
+            void this.borrowTimeOut(eos_api, true, true);
         }
     }
     ResourcesManager.prototype.isManager = function () {
@@ -95,10 +114,10 @@ var ResourcesManager = /** @class */ (function () {
                         return [4 /*yield*/, eos_api.getRPC().get_account(this.account_name)];
                     case 1:
                         result = _a.sent();
-                        this.cpu_available = result.cpu_limit.available;
-                        this.net_available = result.net_limit.available;
-                        rentCPU = this.cpu_available < this.config_powerup.min_cpu;
-                        rentNET = this.net_available < this.config_powerup.min_net;
+                        this.cpu.available = result.cpu_limit.available;
+                        this.net.available = result.net_limit.available;
+                        rentCPU = this.cpu.available < this.config_powerup.min_cpu;
+                        rentNET = this.net.available < this.config_powerup.min_net;
                         this.borrow(eos_api, rentCPU, rentNET);
                         return [2 /*return*/];
                 }
@@ -107,6 +126,7 @@ var ResourcesManager = /** @class */ (function () {
     };
     /**
      * Borrow resources
+     * @param eos_api Eosio API
      * @param cpu True to borrow CPU
      * @param net True to borrow NET
      */
@@ -182,10 +202,16 @@ var ResourcesManager = /** @class */ (function () {
                             }, {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
-                            })];
+                            })
+                            // Lend resources just before a day passes
+                        ];
                     case 6:
                         result = _a.sent();
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
+                        // Lend resources just before a day passes
+                        void this.borrowTimeOut(eos_api, cpu, net);
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)
+                            // Check balances
+                        ];
                     case 7:
                         _a.sent();
                         return [4 /*yield*/, eos_api.getRPC().get_currency_balance(this.config_powerup.paymenttoken, this.account_name, this.dayCalculator.max_payment.symbol.name)];
@@ -204,14 +230,100 @@ var ResourcesManager = /** @class */ (function () {
                         return [4 /*yield*/, this.telegram.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(paid, " by ").concat(this.account_name, " on ").concat(this.eosio.network), true)];
                     case 9:
                         _a.sent();
-                        return [3 /*break*/, 12];
+                        return [2 /*return*/, true];
                     case 10:
                         e_1 = _a.sent();
                         return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.account_name, " on ").concat(this.eosio.network, ". ").concat(String(e_1)), true)];
                     case 11:
                         _a.sent();
-                        return [3 /*break*/, 12];
+                        return [2 /*return*/, false];
                     case 12: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Borrow resources just before a day passes
+     * @param eos_api Eosio API
+     * @param cpu True to borrow CPU
+     * @param net True to borrow NET
+     */
+    ResourcesManager.prototype.borrowTimeOut = function (eos_api, cpu, net) {
+        return __awaiter(this, void 0, void 0, function () {
+            var CPU_Worked, NET_Worked;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (!this.maxDuration) {
+                            return [2 /*return*/];
+                        }
+                        CPU_Worked = undefined;
+                        NET_Worked = undefined;
+                        if (cpu) {
+                            clearTimeout(this.cpu.timeOut);
+                            this.cpu.timeOut = setTimeout(function () { return __awaiter(_this, void 0, void 0, function () {
+                                var tries;
+                                return __generator(this, function (_a) {
+                                    switch (_a.label) {
+                                        case 0:
+                                            tries = 0;
+                                            _a.label = 1;
+                                        case 1:
+                                            if (!(CPU_Worked !== true && tries < eos_api.endpointList.length)) return [3 /*break*/, 4];
+                                            return [4 /*yield*/, this.borrow(eos_api, true, false)];
+                                        case 2:
+                                            CPU_Worked = _a.sent();
+                                            if (CPU_Worked) {
+                                                return [3 /*break*/, 4];
+                                            }
+                                            tries++;
+                                            return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
+                                        case 3:
+                                            _a.sent();
+                                            eos_api.nextEndpoint();
+                                            return [3 /*break*/, 1];
+                                        case 4: return [2 /*return*/];
+                                    }
+                                });
+                            }); }, 23 * 3600000 // 23 hours (before a full day passes)
+                            );
+                        }
+                        if (net && CPU_Worked !== false) { // Do not try to lend NET if CPU failed already
+                            clearTimeout(this.net.timeOut);
+                            this.net.timeOut = setTimeout(function () { return __awaiter(_this, void 0, void 0, function () {
+                                var tries;
+                                return __generator(this, function (_a) {
+                                    switch (_a.label) {
+                                        case 0:
+                                            tries = 0;
+                                            _a.label = 1;
+                                        case 1:
+                                            if (!(NET_Worked !== true && tries < eos_api.endpointList.length)) return [3 /*break*/, 4];
+                                            return [4 /*yield*/, this.borrow(eos_api, false, true)];
+                                        case 2:
+                                            NET_Worked = _a.sent();
+                                            if (NET_Worked) {
+                                                return [3 /*break*/, 4];
+                                            }
+                                            tries++;
+                                            return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
+                                        case 3:
+                                            _a.sent();
+                                            eos_api.nextEndpoint();
+                                            return [3 /*break*/, 1];
+                                        case 4: return [2 /*return*/];
+                                    }
+                                });
+                            }); }, 23 * 3600000 // 23 hours (before a full day passes)
+                            );
+                        }
+                        if (!(CPU_Worked === false || NET_Worked === false)) return [3 /*break*/, 2];
+                        return [4 /*yield*/, this.telegram.logError("\uD83D\uDEA8 *".concat(this.account_name, "* on *").concat(this.eosio.network, "* will give up this time to buy new resources before 24h passes"), true)];
+                    case 1:
+                        _a.sent();
+                        _a.label = 2;
+                    case 2: return [2 /*return*/];
                 }
             });
         });

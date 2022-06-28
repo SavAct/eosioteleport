@@ -9,7 +9,7 @@ export class EosApi {
     private api: Api | null = null
     private epId = -1
     private rpc : JsonRpc | null = null
-    private endpointList: Array<string> = []
+    public endpointList: Array<string> = []
     private endpoint: string = this.endpointList[0]
     private lastInfo: GetInfoResult | null = null
     private gotRightInfo: Array<boolean> = []

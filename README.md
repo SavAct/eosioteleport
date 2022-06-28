@@ -14,12 +14,13 @@ Itself is a backwards compatible fork of the origin [Alien Worlds](https://githu
 - Compile more information and use less space in ETH event logs
 - Also secure when the same oracles serve more than one bridge
 - Inform Telegram contacts about oracle status and errors
+- Automatic loan of EOSIO CPU and NET as required
 
 ## Setup
 See the `md-file` of each component for more informations.
 1. Setup the [EOSIO contract](./contracts/teleporteos/README.md) and deploy it on the EOSIO chain of your choice, like EOS, WAX, ect.
 2. Setup the [ETH contract](./contracts/teleporteth/README.md) and deploy it on all Ethereum based chains of your choice
-3. Configure all [oracles](./oracles/README.md)
+3. Configure all [oracles](./oracle/README.md)
 4. Initialize all deployed contracts, register the EOSIO chain on each Ethereum based chain and vice versa
 5. Start the ETH and EOSIO oracles   
 

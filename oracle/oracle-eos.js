@@ -62,8 +62,8 @@ var EosOracle = /** @class */ (function () {
         this.running = false;
         this.irreversible_time = 0;
         this.telegram = new TelegramMesseger_1.TelegramMessenger(config.telegram);
-        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram);
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
+        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api);
         this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: (0, helpers_1.fromHexString)(config.eos.netId.substring(0, 8)) };
     }
     /**
@@ -75,13 +75,11 @@ var EosOracle = /** @class */ (function () {
     EosOracle.prototype.sendSignAction = function (id, signature, tries) {
         if (tries === void 0) { tries = 0; }
         return __awaiter(this, void 0, void 0, function () {
-            var result, e_1, retry, tooManyFailed;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
+            var result, e_1, retry, tooManyFailed, _a;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
                     case 0:
-                        _a.trys.push([0, 2, , 11]);
-                        // Buy CPU and NET resources if needed
-                        this.rsManager.check(this.eos_api);
+                        _b.trys.push([0, 4, , 21]);
                         // Send transaction
                         console.log("Teleport id ".concat(id, ", try to send signature ").concat(tries, "."));
                         return [4 /*yield*/, this.eos_api.getAPI().transact({
@@ -101,67 +99,83 @@ var EosOracle = /** @class */ (function () {
                             }, {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
-                            })];
+                            })
+                            // Lend CPU and NET resources if needed
+                        ];
                     case 1:
-                        result = _a.sent();
-                        return [3 /*break*/, 11];
+                        result = _b.sent();
+                        // Lend CPU and NET resources if needed
+                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
                     case 2:
-                        e_1 = _a.sent();
+                        // Lend CPU and NET resources if needed
+                        _b.sent();
+                        return [4 /*yield*/, this.rsManager.check(this.eos_api)];
+                    case 3:
+                        _b.sent();
+                        return [3 /*break*/, 21];
+                    case 4:
+                        e_1 = _b.sent();
                         console.error("\nCaught exception: ".concat(e_1, " \n"));
                         retry = true;
                         tooManyFailed = false;
-                        if (e_1 instanceof eosjs_1.RpcError) {
-                            if ('code' in e_1.json && 'error' in e_1.json && 'code' in e_1.json.error) {
-                                switch (e_1.json.error.code) {
-                                    case 3010004: // Unauthorized 
-                                        retry = false;
-                                        break;
-                                    // case 3080001: break          // RAM exceeded
-                                    case 3080002: // NET exceeded
-                                        console.log('Borrow NET');
-                                        this.rsManager.borrow(this.eos_api, false, true);
-                                        break;
-                                    case 3080004: // CPU exceeded
-                                        console.log('Borrow CPU', e_1.message);
-                                        if (e_1.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1) {
-                                            // Blocked by this endpoint because of too many failed transactions
-                                            console.log("Got blocked by ".concat(this.eos_api.getEndpoint()));
-                                            tooManyFailed = true;
-                                        }
-                                        else {
-                                            this.rsManager.borrow(this.eos_api, true, false);
-                                        }
-                                        break;
-                                }
-                            }
+                        if (!(e_1 instanceof eosjs_1.RpcError)) return [3 /*break*/, 12];
+                        if (!('code' in e_1.json && 'error' in e_1.json && 'code' in e_1.json.error)) return [3 /*break*/, 12];
+                        _a = e_1.json.error.code;
+                        switch (_a) {
+                            case 3010004: return [3 /*break*/, 5];
+                            case 3080002: return [3 /*break*/, 6];
+                            case 3080004: return [3 /*break*/, 8];
                         }
-                        tries++;
-                        if (!(tries < this.config.eos.endpoints.length && retry)) return [3 /*break*/, 5];
-                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 3:
-                        _a.sent();
-                        return [4 /*yield*/, this.sendSignAction(id, signature, tries)];
-                    case 4:
-                        _a.sent();
-                        return [3 /*break*/, 10];
+                        return [3 /*break*/, 12];
                     case 5:
-                        if (!tooManyFailed) return [3 /*break*/, 9];
+                        retry = false;
+                        return [3 /*break*/, 12];
+                    case 6:
+                        console.log('Borrow NET');
+                        return [4 /*yield*/, this.rsManager.borrow(this.eos_api, false, true)];
+                    case 7:
+                        _b.sent();
+                        return [3 /*break*/, 12];
+                    case 8:
+                        console.log('Borrow CPU', e_1.message);
+                        if (!(e_1.message.indexOf('estimated CPU time (0 us) is not less than the maximum billable CPU time for the transaction (0 us)') != -1)) return [3 /*break*/, 9];
+                        // Blocked by this endpoint because of too many failed transactions
+                        console.log("Got blocked by ".concat(this.eos_api.getEndpoint()));
+                        tooManyFailed = true;
+                        return [3 /*break*/, 11];
+                    case 9: return [4 /*yield*/, this.rsManager.borrow(this.eos_api, true, false)];
+                    case 10:
+                        _b.sent();
+                        _b.label = 11;
+                    case 11: return [3 /*break*/, 12];
+                    case 12:
+                        tries++;
+                        if (!(tries < this.config.eos.endpoints.length && retry)) return [3 /*break*/, 15];
+                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
+                    case 13:
+                        _b.sent();
+                        return [4 /*yield*/, this.sendSignAction(id, signature, tries)];
+                    case 14:
+                        _b.sent();
+                        return [3 /*break*/, 20];
+                    case 15:
+                        if (!tooManyFailed) return [3 /*break*/, 19];
                         this.telegram.logViaBot('Sleep for 24h, because endpoints blocked further transactions');
                         return [4 /*yield*/, (0, helpers_1.sleep)(24 * 3600 * 1000)];
-                    case 6:
-                        _a.sent();
+                    case 16:
+                        _b.sent();
                         return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 7:
-                        _a.sent();
+                    case 17:
+                        _b.sent();
                         return [4 /*yield*/, this.sendSignAction(id, signature, tries)];
-                    case 8:
-                        _a.sent();
-                        return [3 /*break*/, 10];
-                    case 9:
+                    case 18:
+                        _b.sent();
+                        return [3 /*break*/, 20];
+                    case 19:
                         this.telegram.logError("Teleport id ".concat(id, ", skip sign action by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \u274C\n").concat(String(e_1)));
-                        _a.label = 10;
-                    case 10: return [2 /*return*/];
-                    case 11:
+                        _b.label = 20;
+                    case 20: return [2 /*return*/];
+                    case 21:
                         console.log("Teleport id ".concat(id, ", successful send sign action. \u2714\uFE0F"));
                         return [2 /*return*/];
                 }
