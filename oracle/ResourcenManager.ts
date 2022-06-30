@@ -1,11 +1,11 @@
 import { Asset, assetdataToString, sleep, stringToAsset } from '../scripts/helpers'
 import { ConfigType, PowerUp } from './CommonTypes'
-import { TelegramMessenger } from './TelegramMesseger'
+import { TgM } from './TelegramMesseger'
 import { EosApi } from './EndpointSwitcher'
 
 interface Ressource {
     available: number
-    timeOut: NodeJS.Timeout | undefined
+    lastLend: number
 }
 
 export class ResourcesManager {
@@ -18,14 +18,12 @@ export class ResourcesManager {
 
     private account_name: string = ''
     private permission: string ='active'
-    private cpu : Ressource = {
-        available: 0,
-        timeOut: undefined,
-    }
-    private net : Ressource = {
-        available: 0,
-        timeOut: undefined,
-    }
+
+    private maxBorrowDuration = (24 * 60 * 60 * 1000) - (30 * 60 * 1000)    // have to be less than 24h
+
+    private cpu : Ressource
+    private net : Ressource
+
 
     /**
      * 
@@ -33,9 +31,8 @@ export class ResourcesManager {
      * @param eosio Config data of eosio network
      * @param telegram Telegram messenger object
      * @param eos_api EOSIO API object
-     * @param maxDuration False to disable the lending of resources just before a day passes
      */
-    constructor(private config_powerup: PowerUp | undefined, private eosio: ConfigType["eos"], private telegram: TelegramMessenger, eos_api: EosApi, private maxDuration = false){
+    constructor(private config_powerup: PowerUp | undefined, private eosio: ConfigType["eos"], private telegram: TgM, eos_api: EosApi){
         if(config_powerup){
             this.account_name = eosio.oracleAccount
             if(eosio.oraclePermission){
@@ -64,9 +61,18 @@ export class ResourcesManager {
             }
 
             this.dayCalculator.max_payment = asset
+        }
 
-            // Lend resources just before a day passes
-            void this.borrowTimeOut(eos_api, true, true)
+        // Set the initial last borrowing time. It is in one tenth of the time after the initial start.
+        // This prevents the loan of new resources over and over again if the oracle keeps crashing at the beginning.
+        const toTenthDuration = Date.now() - Math.round((9 * this.maxBorrowDuration) / 10)
+        this.cpu = {
+            available: 0,
+            lastLend: toTenthDuration
+        }
+        this.net = {
+            available: 0,
+            lastLend: toTenthDuration
         }
     }
 
@@ -116,7 +122,7 @@ export class ResourcesManager {
         const symbol = this.dayCalculator.max_payment.symbol
         
         if(max_payment <= 0){
-            await this.telegram.logCosts(`🚫 Max tokens per day is not enough to borrow ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''} by ${this.account_name} on ${this.eosio.network}`, true)
+            await this.telegram.logCosts(`🚫 Max tokens per day is not enough to borrow ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''} by ${TgM.sToMd(this.account_name)} on ${TgM.sToMd(this.eosio.network)}`, true, true)
             return
         }
         try{
@@ -134,7 +140,7 @@ export class ResourcesManager {
                 throw 'No more system tokens available'
             }
             if(assetBefore.amount <= this.dayCalculator.max_payment.amount){
-                await this.telegram.logCosts(`🚨 System tokens are running out by ${this.account_name} on ${this.eosio.network}, ${balance} remain`, true)
+                await this.telegram.logCosts(`🚨 System tokens are running out by ${TgM.sToMd(this.account_name)} on ${TgM.sToMd(this.eosio.network)}, ${TgM.sToMd(balance)} remain`, true, true)
             }
 
             // Send transaction
@@ -161,8 +167,14 @@ export class ResourcesManager {
                 expireSeconds: 30,
             })
 
-            // Lend resources just before a day passes
-            void this.borrowTimeOut(eos_api, cpu, net)
+            // Set new last lend time
+            const dateNow = Date.now()  // Use the exact same date for cpu and net
+            if(cpu){
+                this.cpu.lastLend = dateNow
+            }
+            if(net){
+                this.net.lastLend = dateNow
+            }
 
             await sleep(5000)
             // Check balances
@@ -177,64 +189,40 @@ export class ResourcesManager {
                 this.dayCalculator.currentCosts += paymedAmount
                 paid = assetdataToString(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision)
             }
-            await this.telegram.logCosts(`Borrowed ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''}for ${paid} by ${this.account_name} on ${this.eosio.network}`, true)
+            await this.telegram.logCosts(`Borrowed ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''}for ${TgM.sToMd(paid)} by ${TgM.sToMd(this.account_name)} on ${TgM.sToMd(this.eosio.network)}`, true, true)
             return true
         } catch (e){
-            await this.telegram.logError(`⚡️ by ${this.account_name} on ${this.eosio.network}. ${String(e)}`, true)
+            await this.telegram.logError(`⚡️ by ${this.account_name} on ${this.eosio.network} \n${String(e)}`)
             return false
         }
     }
 
     /**
-     * Borrow resources just before a day passes
+     * Check to borrow resources before the lending time of old loan is over
      * @param eos_api Eosio API
-     * @param cpu True to borrow CPU
-     * @param net True to borrow NET
      */
-    async borrowTimeOut(eos_api: EosApi, cpu: boolean, net: boolean) {
-        if(!this.maxDuration){
-            return
-        }
-        let CPU_Worked: boolean | undefined = undefined
-        let NET_Worked: boolean | undefined = undefined
-        if(cpu){
-            clearTimeout(this.cpu.timeOut)
-            this.cpu.timeOut = setTimeout(
-                async () => {
-                    let tries = 0
-                    while(CPU_Worked !== true && tries < eos_api.endpointList.length){
-                        CPU_Worked = await this.borrow(eos_api, true, false)
-                        if(CPU_Worked){
-                            break;
-                        }
-                        tries++
-                        await sleep(5000)
-                        eos_api.nextEndpoint()
-                    }
-                }, 
-                23*3600000  // 23 hours (before a full day passes)
-            )
-        }
-        if(net && CPU_Worked !== false){    // Do not try to lend NET if CPU failed already
-            clearTimeout(this.net.timeOut)
-            this.net.timeOut = setTimeout(
-                async () => {
-                    let tries = 0
-                    while(NET_Worked !== true && tries < eos_api.endpointList.length){
-                        NET_Worked = await this.borrow(eos_api, false, true)
-                        if(NET_Worked){
-                            break;
-                        }
-                        tries++
-                        await sleep(5000)
-                        eos_api.nextEndpoint()
-                    }
-                }, 
-                23*3600000  // 23 hours (before a full day passes)
-            )
-        }
-        if(CPU_Worked === false || NET_Worked === false){
-            await this.telegram.logError(`🚨 *${this.account_name}* on *${this.eosio.network}* will give up this time to buy new resources before 24h passes`, true)
+    async checkBorrowTimeOut(eos_api: EosApi) {
+        const dateNow = Date.now()
+        const cpu = (dateNow - this.cpu.lastLend) >= this.maxBorrowDuration
+        const net = (dateNow - this.net.lastLend) >= this.maxBorrowDuration
+        
+        if(cpu || net){
+            let tries = 0
+            let worked : boolean | undefined = false
+            while(tries < eos_api.endpointList.length && worked === false){
+                worked = await this.borrow(eos_api, cpu, net)
+                tries++
+                await sleep(5000)
+                eos_api.nextEndpoint()
+            }
+            if(worked === false){
+                await this.telegram.logError(`🚨 *${TgM.sToMd(this.account_name)}* on *${TgM.sToMd(this.eosio.network)}* will give up to try to lend resources for an hour`, true, true)
+                
+                // Disable lendig for an hour
+                const timeshift = (dateNow - this.maxBorrowDuration) + 3600000
+                this.cpu.lastLend = timeshift
+                this.net.lastLend = timeshift
+            }
         }
     }
    

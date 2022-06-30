@@ -1,7 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api'
 import { Telegram } from "./CommonTypes"
 
-export class TelegramMessenger {
+// Telegram Messenger
+export class TgM {
     static rpMarkDown = [
         { reg: /\\/g, repl: '\\' },  
         { reg: /\*/g, repl: '\\*' },
@@ -28,8 +29,8 @@ export class TelegramMessenger {
      * @param str Raw string
      * @returns Markdown string
      */
-    static stringToMarkDown = (str: string)=>{
-        return TelegramMessenger.rpMarkDown.reduce((str, replacement) => { return str.replace(replacement.reg, replacement.repl ) }, str)
+    static sToMd = (str: string)=>{
+        return TgM.rpMarkDown.reduce((str, replacement) => { return str.replace(replacement.reg, replacement.repl ) }, str)
     }
 
     private telegram: {
@@ -69,7 +70,7 @@ export class TelegramMessenger {
         console.log(msg)
         if(this.telegram.bot){
             for (let id of this.telegram.statusIds) {
-                await this.telegram.bot.sendMessage(id, no_convert === true? msg : TelegramMessenger.stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, no_convert === true? msg : TgM.sToMd(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -83,7 +84,7 @@ export class TelegramMessenger {
         console.error(msg)
         if(this.telegram.bot && this.telegram.errorIds.length > 0){
             for (let id of this.telegram.errorIds) {
-                await this.telegram.bot.sendMessage(id, no_convert === true? msg : TelegramMessenger.stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, no_convert === true? msg : TgM.sToMd(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }
@@ -96,7 +97,7 @@ export class TelegramMessenger {
         console.error(msg)
         if(this.telegram.bot && this.telegram.costsIds.length > 0){
             for (let id of this.telegram.costsIds) {
-                await this.telegram.bot.sendMessage(id, no_convert === true? msg : TelegramMessenger.stringToMarkDown(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
+                await this.telegram.bot.sendMessage(id, no_convert === true? msg : TgM.sToMd(msg), { parse_mode: markdown? 'MarkdownV2': undefined})
             }
         }
     }

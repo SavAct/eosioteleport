@@ -15,7 +15,7 @@ import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 import { EosApi, EthApi } from './EndpointSwitcher'
 import {sleep, hexToString, WaitWithAnimation, assetdataToString, stringToAsset, Asset} from '../scripts/helpers'
 import { RpcError } from 'eosjs'
-import { TelegramMessenger } from './TelegramMesseger'
+import { TgM } from './TelegramMesseger'
 import { ResourcesManager } from './ResourcenManager'
 import { Action } from 'eosjs/dist/eosjs-serialize'
 
@@ -63,7 +63,7 @@ class EthOracle {
     private eth_api: EthApi
     private minTrySend = 3
     
-    private telegram: TelegramMessenger
+    private telegram: TgM
     private rsManager: ResourcesManager
     private blocksPerRequest = 100
     
@@ -81,14 +81,14 @@ class EthOracle {
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length)
         
         // Initialize the telegram bot
-        this.telegram = new TelegramMessenger(config.telegram)
+        this.telegram = new TgM(config.telegram)
 
         // Create interfaces for eosio and eth chains
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.eth_api = new EthApi(this.config.eth.netId, this.config.eth.endpoints)
         
         // Initialize the lending options
-        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api, false)
+        this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api)
 
         // Set the version specific data
         this.version = 0
@@ -308,7 +308,7 @@ class EthOracle {
 
             // Continue this event if it was marked as removed
             if(entry.removed){
-                this.telegram.logError(`Claimed event with trx hash ${entry.transactionHash} got removed and will be skipped by ${this.config.eos.oracleAccount} on ${this.config.eth.network} ❌`)
+                this.telegram.logError(`Claimed event with trx hash ${TgM.sToMd(entry.transactionHash)} got removed and will be skipped by ${TgM.sToMd(this.config.eos.oracleAccount)} on ${TgM.sToMd(this.config.eth.network)} ❌`, true, true)
                 continue
             }
 
@@ -326,7 +326,7 @@ class EthOracle {
             // Send transaction on eosio chain
             const eos_res = await this.sendTransaction(actions, trxBroadcast)
             if(eos_res === false){
-                this.telegram.logError(`Skip sending claimed of id ${eosioData.id} to eosio chain by ${this.config.eos.oracleAccount} from ${this.config.eth.network} ❌`)
+                this.telegram.logError(`Skip sending claimed of id ${TgM.sToMd(eosioData.id.toString())} to eosio chain by ${TgM.sToMd(this.config.eos.oracleAccount)} from ${TgM.sToMd(this.config.eth.network)} ❌`, true, true)
             } else if(eos_res === true){
                 console.log(`Id ${eosioData.id} is already claimed, account 0x${eosioData.to_eth.substring(0, 40)}, quantity ${eosioData.quantity} ✔️`)
             } else {
@@ -471,7 +471,7 @@ class EthOracle {
             // Send transaction on eosio chain
             const eos_res = await this.sendTransaction(actions, trxBroadcast)
             if(eos_res === false){
-                this.telegram.logError(`Skip sending teleport to ${eosioData.to} with ref ${eosioData.ref} and quantity of ${eosioData.quantity} ❌`)
+                this.telegram.logError(`*${TgM.sToMd(this.config.eos.oracleAccount)}* on *${TgM.sToMd(this.config.eos.network)}* skips sending teleport to ${TgM.sToMd(eosioData.to)} with ref ${TgM.sToMd(eosioData.ref)} and quantity of ${TgM.sToMd(eosioData.quantity)} ❌`, true, true)
             } else if(eos_res === true){
                 console.log(`Oracle has already approved teleport to ${eosioData.to} with ref ${eosioData.ref} and quantity of ${eosioData.quantity} ✔️`)
             } else {
@@ -530,7 +530,7 @@ class EthOracle {
      * @param trxBroadcast False if transactions should not be broadcasted (not submitted to the block chain)
      */
     async run(start_ref: 'latest' | number | undefined, trxBroadcast: boolean = true, waitCycle = 30){
-        this.telegram.logViaBot(`Starting *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 🏃`, true)
+        this.telegram.logViaBot(`Starting *${TgM.sToMd(this.config.eth.network)}* oracle with *${TgM.sToMd(this.config.eos.oracleAccount)}* and ${TgM.sToMd(this.config.eth.oracleAccount)} 🏃`, true, true)
         let from_block: number | undefined
         this.running = true
         try{
@@ -613,9 +613,9 @@ class EthOracle {
                 await this.eos_api.nextEndpoint()
             }
         } catch(e){
-            await this.telegram.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network}. ${String(e)}`)
+            await this.telegram.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eth.network} \n${String(e)}`)
         }
-        await this.telegram.logViaBot(`Thread closed of *${this.config.eth.network}* oracle with *${this.config.eos.oracleAccount}* and ${this.config.eth.oracleAccount} 💀`, true)
+        await this.telegram.logViaBot(`Thread closed of *${TgM.sToMd(this.config.eth.network)}* oracle with *${TgM.sToMd(this.config.eos.oracleAccount)}* and ${TgM.sToMd(this.config.eth.oracleAccount)} 💀`, true, true)
         if(this.telegram.isTelegram()){
             await sleep(5000)   // Wait some seconds to finsih the sending of telegram messages for real
         }

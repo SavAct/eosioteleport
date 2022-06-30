@@ -79,12 +79,12 @@ var EthOracle = /** @class */ (function () {
         this.blocks_file_name = ".oracle_".concat(configFile.eth.network, "_block-").concat(configFile.eth.oracleAccount);
         this.minTrySend = Math.max(this.minTrySend, config.eos.endpoints.length);
         // Initialize the telegram bot
-        this.telegram = new TelegramMesseger_1.TelegramMessenger(config.telegram);
+        this.telegram = new TelegramMesseger_1.TgM(config.telegram);
         // Create interfaces for eosio and eth chains
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.eth_api = new EndpointSwitcher_1.EthApi(this.config.eth.netId, this.config.eth.endpoints);
         // Initialize the lending options
-        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api, false);
+        this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api);
         // Set the version specific data
         this.version = 0;
         switch (this.config.version) {
@@ -329,7 +329,7 @@ var EthOracle = /** @class */ (function () {
                         }
                         // Continue this event if it was marked as removed
                         if (entry.removed) {
-                            this.telegram.logError("Claimed event with trx hash ".concat(entry.transactionHash, " got removed and will be skipped by ").concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, " \u274C"));
+                            this.telegram.logError("Claimed event with trx hash ".concat(TelegramMesseger_1.TgM.sToMd(entry.transactionHash), " got removed and will be skipped by ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), " on ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.network), " \u274C"), true, true);
                             return [3 /*break*/, 7];
                         }
                         actions = [{
@@ -345,7 +345,7 @@ var EthOracle = /** @class */ (function () {
                     case 6:
                         eos_res = _b.sent();
                         if (eos_res === false) {
-                            this.telegram.logError("Skip sending claimed of id ".concat(eosioData.id, " to eosio chain by ").concat(this.config.eos.oracleAccount, " from ").concat(this.config.eth.network, " \u274C"));
+                            this.telegram.logError("Skip sending claimed of id ".concat(TelegramMesseger_1.TgM.sToMd(eosioData.id.toString()), " to eosio chain by ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), " from ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.network), " \u274C"), true, true);
                         }
                         else if (eos_res === true) {
                             console.log("Id ".concat(eosioData.id, " is already claimed, account 0x").concat(eosioData.to_eth.substring(0, 40), ", quantity ").concat(eosioData.quantity, " \u2714\uFE0F"));
@@ -553,7 +553,7 @@ var EthOracle = /** @class */ (function () {
                     case 6:
                         eos_res = _b.sent();
                         if (eos_res === false) {
-                            this.telegram.logError("Skip sending teleport to ".concat(eosioData.to, " with ref ").concat(eosioData.ref, " and quantity of ").concat(eosioData.quantity, " \u274C"));
+                            this.telegram.logError("*".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* on *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* skips sending teleport to ").concat(TelegramMesseger_1.TgM.sToMd(eosioData.to), " with ref ").concat(TelegramMesseger_1.TgM.sToMd(eosioData.ref), " and quantity of ").concat(TelegramMesseger_1.TgM.sToMd(eosioData.quantity), " \u274C"), true, true);
                         }
                         else if (eos_res === true) {
                             console.log("Oracle has already approved teleport to ".concat(eosioData.to, " with ref ").concat(eosioData.ref, " and quantity of ").concat(eosioData.quantity, " \u2714\uFE0F"));
@@ -663,7 +663,7 @@ var EthOracle = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        this.telegram.logViaBot("Starting *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83C\uDFC3"), true);
+                        this.telegram.logViaBot("Starting *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* and ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.oracleAccount), " \uD83C\uDFC3"), true, true);
                         this.running = true;
                         _a.label = 1;
                     case 1:
@@ -781,11 +781,11 @@ var EthOracle = /** @class */ (function () {
                     case 27: return [3 /*break*/, 30];
                     case 28:
                         e_7 = _a.sent();
-                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, ". ").concat(String(e_7)))];
+                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, " \n").concat(String(e_7)))];
                     case 29:
                         _a.sent();
                         return [3 /*break*/, 30];
-                    case 30: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(this.config.eth.network, "* oracle with *").concat(this.config.eos.oracleAccount, "* and ").concat(this.config.eth.oracleAccount, " \uD83D\uDC80"), true)];
+                    case 30: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* and ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.oracleAccount), " \uD83D\uDC80"), true, true)];
                     case 31:
                         _a.sent();
                         if (!this.telegram.isTelegram()) return [3 /*break*/, 33];

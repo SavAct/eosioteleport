@@ -14,7 +14,7 @@ import { EosApi } from './EndpointSwitcher'
 import { ConfigType, PowerUp, TeleportTableEntry } from './CommonTypes'
 import yargs, { check, number } from 'yargs'
 import {sleep, toHexString, fromHexString, WaitWithAnimation, stringToAsset, Asset, assetdataToString} from '../scripts/helpers'
-import { TelegramMessenger } from './TelegramMesseger'
+import { TgM } from './TelegramMesseger'
 import { ResourcesManager } from './ResourcenManager'
 
 interface EOSIO_Chain_Data {
@@ -29,11 +29,11 @@ class EosOracle {
     public running = false
     private irreversible_time = 0
     static maxWait = 180    // The max amount of seconds to wait to check an entry again if it is irreversible now
-    private telegram: TelegramMessenger
+    private telegram: TgM
     private rsManager: ResourcesManager
 
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider, private force: boolean){
-        this.telegram = new TelegramMessenger(config.telegram)
+        this.telegram = new TgM(config.telegram)
         
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
         this.rsManager = new ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api)
@@ -111,7 +111,7 @@ class EosOracle {
                     await this.eos_api.nextEndpoint()
                     await this.sendSignAction(id, signature, tries)
                 } else {
-                    this.telegram.logError(`Teleport id ${id}, skip sign action by ${this.config.eos.oracleAccount} on ${this.config.eos.network} ❌\n${String(e)}`)
+                    this.telegram.logError(`Teleport id ${id.toString()}, skip sign action by ${this.config.eos.oracleAccount} on ${this.config.eos.network} ❌\n${String(e)}`)
                 }
             }
             return
@@ -379,7 +379,7 @@ class EosOracle {
             }
 
             if(!isVerifyed){
-                this.telegram.logError(`Teleport id ${item.id}, skip this one by ${this.config.eos.oracleAccount} on ${this.config.eos.network} ❌`)
+                this.telegram.logError(`Teleport id ${TgM.sToMd(item.id.toString())}, skip this one by *${TgM.sToMd(this.config.eos.oracleAccount)}* on *${TgM.sToMd(this.config.eos.network)}* ❌`, true, true)
             } else {
                 // Sign the serialized teleport
                 const signature = await EosOracle.signTeleport(logData, this.config.eth.privateKey)
@@ -414,7 +414,7 @@ class EosOracle {
      * @param requestAmount Amount of requested teleports per request
      */
     async run(id = 0, requestAmount = 100, waitCycle = EosOracle.maxWait){
-        await this.telegram.logViaBot(`Starting *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 🏃`, true)
+        await this.telegram.logViaBot(`Starting *${TgM.sToMd(this.config.eos.network)}* oracle with *${TgM.sToMd(this.config.eos.oracleAccount)}* 🏃`, true, true)
 
         // Create an object to change the current id on each run
         this.running = true
@@ -423,13 +423,14 @@ class EosOracle {
             while(this.running){
                 await this.eos_api.nextEndpoint()
                 await this.updateTimes()
+                await this.rsManager.checkBorrowTimeOut(this.eos_api)
                 await this.signAllTeleportsUntilNow(signProcessData)
                 await WaitWithAnimation(waitCycle, 'All available teleports signed')
             }
         } catch (e){
-            await this.telegram.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eos.network}. ${String(e)}`)
+            await this.telegram.logError(`⚡️ by ${this.config.eos.oracleAccount} on ${this.config.eos.network} \n${String(e)}`)
         }
-        await this.telegram.logViaBot(`Thread closed of *${this.config.eos.network}* oracle with *${this.config.eos.oracleAccount}* 💀`, true)
+        await this.telegram.logViaBot(`Thread closed of *${TgM.sToMd(this.config.eos.network)}* oracle with *${TgM.sToMd(this.config.eos.oracleAccount)}* 💀`, true, true)
         if(this.telegram.isTelegram()){
             await sleep(5000)   // Wait some seconds to finsih the sending of telegram messages for real
         }

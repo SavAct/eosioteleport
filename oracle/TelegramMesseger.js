@@ -39,10 +39,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TelegramMessenger = void 0;
+exports.TgM = void 0;
 var node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
-var TelegramMessenger = /** @class */ (function () {
-    function TelegramMessenger(config_telegram) {
+// Telegram Messenger
+var TgM = /** @class */ (function () {
+    function TgM(config_telegram) {
         this.telegram = { bot: undefined, statusIds: [], errorIds: [], costsIds: [] };
         if (config_telegram) {
             if (typeof config_telegram.statusIds != 'object') {
@@ -61,14 +62,14 @@ var TelegramMessenger = /** @class */ (function () {
             this.telegram.bot = new node_telegram_bot_api_1.default(config_telegram.privateToken, { polling: false });
         }
     }
-    TelegramMessenger.prototype.isTelegram = function () {
+    TgM.prototype.isTelegram = function () {
         return this.telegram.bot ? true : false;
     };
     /**
      * Send a message to a telegram account
      * @param msg Message
      */
-    TelegramMessenger.prototype.logViaBot = function (msg, markdown, no_convert) {
+    TgM.prototype.logViaBot = function (msg, markdown, no_convert) {
         if (markdown === void 0) { markdown = false; }
         return __awaiter(this, void 0, void 0, function () {
             var _i, _a, id;
@@ -82,7 +83,7 @@ var TelegramMessenger = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TelegramMessenger.stringToMarkDown(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -99,7 +100,7 @@ var TelegramMessenger = /** @class */ (function () {
      * @param msg
      * @param markdown
      */
-    TelegramMessenger.prototype.logError = function (msg, markdown, no_convert) {
+    TgM.prototype.logError = function (msg, markdown, no_convert) {
         if (markdown === void 0) { markdown = false; }
         return __awaiter(this, void 0, void 0, function () {
             var _i, _a, id;
@@ -113,7 +114,7 @@ var TelegramMessenger = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TelegramMessenger.stringToMarkDown(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -130,7 +131,7 @@ var TelegramMessenger = /** @class */ (function () {
      * @param msg
      * @param markdown
      */
-    TelegramMessenger.prototype.logCosts = function (msg, markdown, no_convert) {
+    TgM.prototype.logCosts = function (msg, markdown, no_convert) {
         if (markdown === void 0) { markdown = false; }
         return __awaiter(this, void 0, void 0, function () {
             var _i, _a, id;
@@ -144,7 +145,7 @@ var TelegramMessenger = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TelegramMessenger.stringToMarkDown(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -156,7 +157,7 @@ var TelegramMessenger = /** @class */ (function () {
             });
         });
     };
-    TelegramMessenger.rpMarkDown = [
+    TgM.rpMarkDown = [
         { reg: /\\/g, repl: '\\' },
         { reg: /\*/g, repl: '\\*' },
         { reg: /\_/g, repl: '\\_' },
@@ -181,9 +182,9 @@ var TelegramMessenger = /** @class */ (function () {
      * @param str Raw string
      * @returns Markdown string
      */
-    TelegramMessenger.stringToMarkDown = function (str) {
-        return TelegramMessenger.rpMarkDown.reduce(function (str, replacement) { return str.replace(replacement.reg, replacement.repl); }, str);
+    TgM.sToMd = function (str) {
+        return TgM.rpMarkDown.reduce(function (str, replacement) { return str.replace(replacement.reg, replacement.repl); }, str);
     };
-    return TelegramMessenger;
+    return TgM;
 }());
-exports.TelegramMessenger = TelegramMessenger;
+exports.TgM = TgM;

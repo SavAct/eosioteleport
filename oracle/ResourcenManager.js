@@ -38,6 +38,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ResourcesManager = void 0;
 var helpers_1 = require("../scripts/helpers");
+var TelegramMesseger_1 = require("./TelegramMesseger");
 var ResourcesManager = /** @class */ (function () {
     /**
      *
@@ -45,14 +46,11 @@ var ResourcesManager = /** @class */ (function () {
      * @param eosio Config data of eosio network
      * @param telegram Telegram messenger object
      * @param eos_api EOSIO API object
-     * @param maxDuration False to disable the lending of resources just before a day passes
      */
-    function ResourcesManager(config_powerup, eosio, telegram, eos_api, maxDuration) {
-        if (maxDuration === void 0) { maxDuration = false; }
+    function ResourcesManager(config_powerup, eosio, telegram, eos_api) {
         this.config_powerup = config_powerup;
         this.eosio = eosio;
         this.telegram = telegram;
-        this.maxDuration = maxDuration;
         // Object to store the remaining system tokens per day
         this.dayCalculator = {
             currentCosts: BigInt(0),
@@ -61,14 +59,7 @@ var ResourcesManager = /** @class */ (function () {
         };
         this.account_name = '';
         this.permission = 'active';
-        this.cpu = {
-            available: 0,
-            timeOut: undefined,
-        };
-        this.net = {
-            available: 0,
-            timeOut: undefined,
-        };
+        this.maxBorrowDuration = (24 * 60 * 60 * 1000) - (30 * 60 * 1000); // have to be less than 24h
         if (config_powerup) {
             this.account_name = eosio.oracleAccount;
             if (eosio.oraclePermission) {
@@ -95,9 +86,18 @@ var ResourcesManager = /** @class */ (function () {
                 }
             }
             this.dayCalculator.max_payment = asset;
-            // Lend resources just before a day passes
-            void this.borrowTimeOut(eos_api, true, true);
         }
+        // Set the initial last borrowing time. It is in one tenth of the time after the initial start.
+        // This prevents the loan of new resources over and over again if the oracle keeps crashing at the beginning.
+        var toTenthDuration = Date.now() - Math.round((9 * this.maxBorrowDuration) / 10);
+        this.cpu = {
+            available: 0,
+            lastLend: toTenthDuration
+        };
+        this.net = {
+            available: 0,
+            lastLend: toTenthDuration
+        };
     }
     ResourcesManager.prototype.isManager = function () {
         return this.config_powerup ? true : false;
@@ -134,7 +134,7 @@ var ResourcesManager = /** @class */ (function () {
         if (cpu === void 0) { cpu = false; }
         if (net === void 0) { net = false; }
         return __awaiter(this, void 0, void 0, function () {
-            var powerup, max_payment, symbol, balances, balance, assetBefore, action, result, afterBalances, assetAfter, paymedAmount, paid, e_1;
+            var powerup, max_payment, symbol, balances, balance, assetBefore, action, result, dateNow, afterBalances, assetAfter, paymedAmount, paid, e_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -155,7 +155,7 @@ var ResourcesManager = /** @class */ (function () {
                         }
                         symbol = this.dayCalculator.max_payment.symbol;
                         if (!(max_payment <= 0)) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.telegram.logCosts("\uD83D\uDEAB Max tokens per day is not enough to borrow ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', " by ").concat(this.account_name, " on ").concat(this.eosio.network), true)];
+                        return [4 /*yield*/, this.telegram.logCosts("\uD83D\uDEAB Max tokens per day is not enough to borrow ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', " by ").concat(TelegramMesseger_1.TgM.sToMd(this.account_name), " on ").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network)), true, true)];
                     case 1:
                         _a.sent();
                         return [2 /*return*/];
@@ -176,7 +176,7 @@ var ResourcesManager = /** @class */ (function () {
                             throw 'No more system tokens available';
                         }
                         if (!(assetBefore.amount <= this.dayCalculator.max_payment.amount)) return [3 /*break*/, 5];
-                        return [4 /*yield*/, this.telegram.logCosts("\uD83D\uDEA8 System tokens are running out by ".concat(this.account_name, " on ").concat(this.eosio.network, ", ").concat(balance, " remain"), true)];
+                        return [4 /*yield*/, this.telegram.logCosts("\uD83D\uDEA8 System tokens are running out by ".concat(TelegramMesseger_1.TgM.sToMd(this.account_name), " on ").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network), ", ").concat(TelegramMesseger_1.TgM.sToMd(balance), " remain"), true, true)];
                     case 4:
                         _a.sent();
                         _a.label = 5;
@@ -203,12 +203,18 @@ var ResourcesManager = /** @class */ (function () {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
                             })
-                            // Lend resources just before a day passes
+                            // Set new last lend time
                         ];
                     case 6:
                         result = _a.sent();
-                        // Lend resources just before a day passes
-                        void this.borrowTimeOut(eos_api, cpu, net);
+                        dateNow = Date.now() // Use the exact same date for cpu and net
+                        ;
+                        if (cpu) {
+                            this.cpu.lastLend = dateNow;
+                        }
+                        if (net) {
+                            this.net.lastLend = dateNow;
+                        }
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)
                             // Check balances
                         ];
@@ -227,13 +233,13 @@ var ResourcesManager = /** @class */ (function () {
                             this.dayCalculator.currentCosts += paymedAmount;
                             paid = (0, helpers_1.assetdataToString)(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision);
                         }
-                        return [4 /*yield*/, this.telegram.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(paid, " by ").concat(this.account_name, " on ").concat(this.eosio.network), true)];
+                        return [4 /*yield*/, this.telegram.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(TelegramMesseger_1.TgM.sToMd(paid), " by ").concat(TelegramMesseger_1.TgM.sToMd(this.account_name), " on ").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network)), true, true)];
                     case 9:
                         _a.sent();
                         return [2 /*return*/, true];
                     case 10:
                         e_1 = _a.sent();
-                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.account_name, " on ").concat(this.eosio.network, ". ").concat(String(e_1)), true)];
+                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.account_name, " on ").concat(this.eosio.network, " \n").concat(String(e_1)))];
                     case 11:
                         _a.sent();
                         return [2 /*return*/, false];
@@ -243,87 +249,45 @@ var ResourcesManager = /** @class */ (function () {
         });
     };
     /**
-     * Borrow resources just before a day passes
+     * Check to borrow resources before the lending time of old loan is over
      * @param eos_api Eosio API
-     * @param cpu True to borrow CPU
-     * @param net True to borrow NET
      */
-    ResourcesManager.prototype.borrowTimeOut = function (eos_api, cpu, net) {
+    ResourcesManager.prototype.checkBorrowTimeOut = function (eos_api) {
         return __awaiter(this, void 0, void 0, function () {
-            var CPU_Worked, NET_Worked;
-            var _this = this;
+            var dateNow, cpu, net, tries, worked, timeshift;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!this.maxDuration) {
-                            return [2 /*return*/];
-                        }
-                        CPU_Worked = undefined;
-                        NET_Worked = undefined;
-                        if (cpu) {
-                            clearTimeout(this.cpu.timeOut);
-                            this.cpu.timeOut = setTimeout(function () { return __awaiter(_this, void 0, void 0, function () {
-                                var tries;
-                                return __generator(this, function (_a) {
-                                    switch (_a.label) {
-                                        case 0:
-                                            tries = 0;
-                                            _a.label = 1;
-                                        case 1:
-                                            if (!(CPU_Worked !== true && tries < eos_api.endpointList.length)) return [3 /*break*/, 4];
-                                            return [4 /*yield*/, this.borrow(eos_api, true, false)];
-                                        case 2:
-                                            CPU_Worked = _a.sent();
-                                            if (CPU_Worked) {
-                                                return [3 /*break*/, 4];
-                                            }
-                                            tries++;
-                                            return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
-                                        case 3:
-                                            _a.sent();
-                                            eos_api.nextEndpoint();
-                                            return [3 /*break*/, 1];
-                                        case 4: return [2 /*return*/];
-                                    }
-                                });
-                            }); }, 23 * 3600000 // 23 hours (before a full day passes)
-                            );
-                        }
-                        if (net && CPU_Worked !== false) { // Do not try to lend NET if CPU failed already
-                            clearTimeout(this.net.timeOut);
-                            this.net.timeOut = setTimeout(function () { return __awaiter(_this, void 0, void 0, function () {
-                                var tries;
-                                return __generator(this, function (_a) {
-                                    switch (_a.label) {
-                                        case 0:
-                                            tries = 0;
-                                            _a.label = 1;
-                                        case 1:
-                                            if (!(NET_Worked !== true && tries < eos_api.endpointList.length)) return [3 /*break*/, 4];
-                                            return [4 /*yield*/, this.borrow(eos_api, false, true)];
-                                        case 2:
-                                            NET_Worked = _a.sent();
-                                            if (NET_Worked) {
-                                                return [3 /*break*/, 4];
-                                            }
-                                            tries++;
-                                            return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
-                                        case 3:
-                                            _a.sent();
-                                            eos_api.nextEndpoint();
-                                            return [3 /*break*/, 1];
-                                        case 4: return [2 /*return*/];
-                                    }
-                                });
-                            }); }, 23 * 3600000 // 23 hours (before a full day passes)
-                            );
-                        }
-                        if (!(CPU_Worked === false || NET_Worked === false)) return [3 /*break*/, 2];
-                        return [4 /*yield*/, this.telegram.logError("\uD83D\uDEA8 *".concat(this.account_name, "* on *").concat(this.eosio.network, "* will give up this time to buy new resources before 24h passes"), true)];
+                        dateNow = Date.now();
+                        cpu = (dateNow - this.cpu.lastLend) >= this.maxBorrowDuration;
+                        net = (dateNow - this.net.lastLend) >= this.maxBorrowDuration;
+                        if (!(cpu || net)) return [3 /*break*/, 6];
+                        tries = 0;
+                        worked = false;
+                        _a.label = 1;
                     case 1:
+                        if (!(tries < eos_api.endpointList.length && worked === false)) return [3 /*break*/, 4];
+                        return [4 /*yield*/, this.borrow(eos_api, cpu, net)];
+                    case 2:
+                        worked = _a.sent();
+                        tries++;
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
+                    case 3:
                         _a.sent();
-                        _a.label = 2;
-                    case 2: return [2 /*return*/];
+                        eos_api.nextEndpoint();
+                        return [3 /*break*/, 1];
+                    case 4:
+                        if (!(worked === false)) return [3 /*break*/, 6];
+                        return [4 /*yield*/, this.telegram.logError("\uD83D\uDEA8 *".concat(TelegramMesseger_1.TgM.sToMd(this.account_name), "* on *").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network), "* will give up to try to lend resources for an hour"), true, true)
+                            // Disable lendig for an hour
+                        ];
+                    case 5:
+                        _a.sent();
+                        timeshift = (dateNow - this.maxBorrowDuration) + 3600000;
+                        this.cpu.lastLend = timeshift;
+                        this.net.lastLend = timeshift;
+                        _a.label = 6;
+                    case 6: return [2 /*return*/];
                 }
             });
         });
