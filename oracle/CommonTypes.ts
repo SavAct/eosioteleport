@@ -39,8 +39,10 @@ export interface PowerUp{
     contract: string,
     paymenttoken: string,
     days: number,
-    cpu_frac: number,
-    net_frac: number,
+    cpu?: number,
+    net?: number,
+    cpu_frac?: number,
+    net_frac?: number,
     max_payment: string,
   
     min_cpu: number,

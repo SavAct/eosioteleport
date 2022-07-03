@@ -2,10 +2,34 @@ import { Asset, assetdataToString, sleep, stringToAsset } from '../scripts/helpe
 import { ConfigType, PowerUp } from './CommonTypes'
 import { TgM } from './TelegramMesseger'
 import { EosApi } from './EndpointSwitcher'
+import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 
 interface Ressource {
     available: number
     lastLend: number
+}
+
+interface RawResourceState {
+    version: number,
+    weight: string,
+    weight_ratio: string,
+    assumed_stake_weight:string,
+    initial_weight_ratio:string, 
+    target_weight_ratio: string,
+    initial_timestamp:string,
+    target_timestamp:string,
+    exponent:string,
+    decay_secs: number,
+    min_price: string,
+    max_price:string,
+    utilization:string,
+    adjusted_utilization:string,
+    utilization_timestamp:string
+}
+interface RawPowerUpState{
+    version: number,
+    net: RawResourceState,
+    cpu: RawResourceState
 }
 
 export class ResourcesManager {
@@ -61,6 +85,11 @@ export class ResourcesManager {
             }
 
             this.dayCalculator.max_payment = asset
+            
+            if(this.config_powerup){
+                this.config_powerup.cpu = typeof this.config_powerup.cpu? Number(this.config_powerup.cpu) : 0
+                this.config_powerup.net = typeof this.config_powerup.net? Number(this.config_powerup.net) : 0
+            }
         }
 
         // Set the initial last borrowing time. It is in one tenth of the time after the initial start.
@@ -143,6 +172,16 @@ export class ResourcesManager {
                 await this.telegram.logCosts(`🚨 System tokens are running out by ${TgM.sToMd(this.account_name)} on ${TgM.sToMd(this.eosio.network)}, ${TgM.sToMd(balance)} remain`, true, true)
             }
 
+            // Get cpu_frac and net_frac for power up
+            const cpu_us = typeof powerup.cpu? Number(powerup.cpu) : 0
+            const net_bytes = typeof powerup.net? Number(powerup.net) : 0
+            let fracs = {cpu: 0, net: 0}
+            if(powerup.cpu_frac == undefined || powerup.net_frac == undefined){
+                fracs = await ResourcesManager.calcFrecs(eos_api, cpu_us, net_bytes)
+            }
+            const cpu_frac = cpu? (powerup.cpu_frac !== undefined? powerup.cpu_frac: fracs.cpu): 0
+            const net_frac = net? (powerup.net_frac !== undefined? powerup.net_frac: fracs.net) : 0
+
             // Send transaction
             const action = {
                 account: this.config_powerup.contract,
@@ -152,8 +191,8 @@ export class ResourcesManager {
                     permission: this.permission || 'active',
                 }],
                 data: {
-                    cpu_frac: cpu? powerup.cpu_frac : 0,
-                    net_frac: net? powerup.net_frac : 0,
+                    cpu_frac,
+                    net_frac,
                     days: powerup.days,
                     max_payment: assetdataToString(max_payment, symbol.name, symbol.precision),
                     payer: this.account_name,
@@ -167,6 +206,8 @@ export class ResourcesManager {
                 expireSeconds: 30,
             })
 
+            const powerUpResult = ResourcesManager.getPowerUpResult(result as TransactResult)
+
             // Set new last lend time
             const dateNow = Date.now()  // Use the exact same date for cpu and net
             if(cpu){
@@ -176,18 +217,13 @@ export class ResourcesManager {
                 this.net.lastLend = dateNow
             }
 
-            await sleep(5000)
-            // Check balances
-            const afterBalances = await eos_api.getRPC().get_currency_balance(this.config_powerup.paymenttoken, this.account_name, this.dayCalculator.max_payment.symbol.name)
-            const assetAfter = stringToAsset(afterBalances[0])
-            const paymedAmount = assetBefore.amount - assetAfter.amount
-            
             let paid : string
-            if(paymedAmount < 0 || paymedAmount > max_payment){
-                paid = 'an unkown amount of tokens'
+            if(powerUpResult){
+                paid = String(powerUpResult.fee)
+                const payment = stringToAsset(paid)
+                this.dayCalculator.currentCosts += payment.amount
             } else {
-                this.dayCalculator.currentCosts += paymedAmount
-                paid = assetdataToString(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision)
+                paid = 'an unkown amount of tokens'
             }
             await this.telegram.logCosts(`Borrowed ${cpu? 'CPU ':''}${cpu && net? 'and ':''}${net?'NET ':''}for ${TgM.sToMd(paid)} by ${TgM.sToMd(this.account_name)} on ${TgM.sToMd(this.eosio.network)}`, true, true)
             return true
@@ -195,6 +231,28 @@ export class ResourcesManager {
             await this.telegram.logError(`⚡️ by ${this.account_name} on ${this.eosio.network} \n${String(e)}`)
             return false
         }
+    }
+
+    /**
+     * Get power up result from a transaction result
+     * @param trxResult Transaction result of a powerup action
+     * @returns paid fee, powup_net and powup_cpu otherwise undefined
+     */
+    static getPowerUpResult(trxResult: TransactResult){
+        if('processed' in trxResult && 'action_traces' in trxResult.processed && trxResult.processed.action_traces.length > 0){
+            for(let act_traces of (trxResult as TransactResult).processed.action_traces){
+                if('act' in act_traces && act_traces.act.account == 'eosio' && act_traces.act.name == 'powerup'){
+                    for(let in_trace of (act_traces as {inline_traces: any}).inline_traces){
+                        if('act' in in_trace && in_trace.act.account == 'eosio.reserv', in_trace.act.name == 'powupresult'){
+                            if('fee' in in_trace.act.data && 'powup_net' in in_trace.act.data && 'powup_cpu' in in_trace.act.data){
+                                return in_trace.act.data as {fee: string, powup_net: number, powup_cpu: number}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return undefined
     }
 
     /**
@@ -212,8 +270,8 @@ export class ResourcesManager {
             while(tries < eos_api.endpointList.length && worked === false){
                 worked = await this.borrow(eos_api, cpu, net)
                 tries++
+                await eos_api.nextEndpoint()
                 await sleep(5000)
-                eos_api.nextEndpoint()
             }
             if(worked === false){
                 await this.telegram.logError(`🚨 *${TgM.sToMd(this.account_name)}* on *${TgM.sToMd(this.eosio.network)}* will give up to try to lend resources for an hour`, true, true)
@@ -225,5 +283,61 @@ export class ResourcesManager {
             }
         }
     }
-   
+
+    private static BNPrecision = 1000000
+    private static BlocksPerDay = 2*24*60*60
+
+    static resource_to_frac(amount: number, limit: number, weight: number){
+        const day_limit = limit * ResourcesManager.BlocksPerDay * ResourcesManager.BNPrecision
+        const usage = Math.ceil(day_limit / weight)
+        const frac = Math.floor((amount / Number(usage)) * ResourcesManager.BNPrecision) / weight
+        return Math.floor(frac * Math.pow(10, 15))
+    }
+
+    static async getPowerUpState(eos_api: EosApi){
+        for(let tries = 0; tries < eos_api.endpointList.length; tries++){
+            try{
+                const result = await eos_api.getRPC().get_table_rows({
+                    json: true, 
+                    code: 'eosio',
+                    table: 'powup.state'
+                    // Use no scope, "eosio" as scope will not work.
+                })
+                if('rows' in result && result.rows.length > 0){
+                    return result.rows[0] as RawPowerUpState
+                }
+            } catch(e){
+                console.log(`Error on getting entries from powup.state by ${eos_api.getEndpoint()}`, e)
+                await eos_api.nextEndpoint()
+                await sleep(1000)
+            }
+        }
+        throw('No entries of powup.state found')
+    }
+
+    /**
+     * Calculate frac parameters of EOSIO power up action by micro seconds of CPU and byte amount of NET 
+     * @param eos_api EOSIO API
+     * @param cpu_us Amount of CPU to lend
+     * @param net_byte Amount of NET to lend
+     * @returns cpu_frac and net_frac
+     */
+    static async calcFrecs(eos_api: EosApi, cpu_us: number, net_byte: number){
+        // Get weights
+        const state = await ResourcesManager.getPowerUpState(eos_api)
+        if(state.version != 0){
+            throw('Error wrong version of power up state')
+        }
+
+        // Get limits
+        const info = eos_api.get_lastInfo()
+        if(info == null){
+            return {cpu: 0, net: 0}
+        }
+        
+        return { 
+            cpu: cpu_us == 0? 0 : ResourcesManager.resource_to_frac(cpu_us, info.block_cpu_limit, Number(state.cpu.weight)),
+            net: net_byte == 0? 0 : ResourcesManager.resource_to_frac(net_byte, info.block_net_limit, Number(state.net.weight))
+        }
+    }
 }

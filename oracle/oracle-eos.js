@@ -361,7 +361,7 @@ var EosOracle = /** @class */ (function () {
                         verifications = 0;
                         _a.label = 1;
                     case 1:
-                        _a.trys.push([1, 7, , 8]);
+                        _a.trys.push([1, 7, , 9]);
                         return [4 /*yield*/, this.eos_api.getRPC().get_info()];
                     case 2:
                         info = _a.sent();
@@ -393,20 +393,23 @@ var EosOracle = /** @class */ (function () {
                             throw ("Time parameter is not a number, occurred by using ".concat(this.eos_api.getEndpoint()));
                         }
                         verifications++;
-                        return [3 /*break*/, 8];
+                        return [3 /*break*/, 9];
                     case 7:
                         e_3 = _a.sent();
                         console.log('⚡️ ' + e_3);
                         // Get next endpoint and check if all endpoints are already checked
-                        this.eos_api.nextEndpoint();
+                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
+                    case 8:
+                        // Get next endpoint and check if all endpoints are already checked
+                        _a.sent();
                         if (epStart == this.eos_api.getEndpoint()) {
                             throw ('Could not get last irreversible block time from any endpoint. ⛔');
                         }
-                        return [3 /*break*/, 8];
-                    case 8:
-                        if (verifications < this.config.eos.epVerifications) return [3 /*break*/, 1];
-                        _a.label = 9;
+                        return [3 /*break*/, 9];
                     case 9:
+                        if (verifications < this.config.eos.epVerifications) return [3 /*break*/, 1];
+                        _a.label = 10;
+                    case 10:
                         // Set new time values
                         if (lowestIrr) {
                             this.irreversible_time = lowestIrr;

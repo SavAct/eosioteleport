@@ -294,7 +294,7 @@ class EosOracle {
             } catch(e) {
                 console.log('⚡️ ' + e)
                 // Get next endpoint and check if all endpoints are already checked
-                this.eos_api.nextEndpoint()
+                await this.eos_api.nextEndpoint()
                 if(epStart == this.eos_api.getEndpoint()){
                     throw('Could not get last irreversible block time from any endpoint. ⛔')
                 }

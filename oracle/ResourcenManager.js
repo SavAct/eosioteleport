@@ -86,6 +86,10 @@ var ResourcesManager = /** @class */ (function () {
                 }
             }
             this.dayCalculator.max_payment = asset;
+            if (this.config_powerup) {
+                this.config_powerup.cpu = typeof this.config_powerup.cpu ? Number(this.config_powerup.cpu) : 0;
+                this.config_powerup.net = typeof this.config_powerup.net ? Number(this.config_powerup.net) : 0;
+            }
         }
         // Set the initial last borrowing time. It is in one tenth of the time after the initial start.
         // This prevents the loan of new resources over and over again if the oracle keeps crashing at the beginning.
@@ -134,7 +138,7 @@ var ResourcesManager = /** @class */ (function () {
         if (cpu === void 0) { cpu = false; }
         if (net === void 0) { net = false; }
         return __awaiter(this, void 0, void 0, function () {
-            var powerup, max_payment, symbol, balances, balance, assetBefore, action, result, dateNow, afterBalances, assetAfter, paymedAmount, paid, e_1;
+            var powerup, max_payment, symbol, balances, balance, assetBefore, cpu_us, net_bytes, fracs, cpu_frac, net_frac, action, result, powerUpResult, dateNow, paid, payment, e_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -181,6 +185,17 @@ var ResourcesManager = /** @class */ (function () {
                         _a.sent();
                         _a.label = 5;
                     case 5:
+                        cpu_us = typeof powerup.cpu ? Number(powerup.cpu) : 0;
+                        net_bytes = typeof powerup.net ? Number(powerup.net) : 0;
+                        fracs = { cpu: 0, net: 0 };
+                        if (!(powerup.cpu_frac == undefined || powerup.net_frac == undefined)) return [3 /*break*/, 7];
+                        return [4 /*yield*/, ResourcesManager.calcFrecs(eos_api, cpu_us, net_bytes)];
+                    case 6:
+                        fracs = _a.sent();
+                        _a.label = 7;
+                    case 7:
+                        cpu_frac = cpu ? (powerup.cpu_frac !== undefined ? powerup.cpu_frac : fracs.cpu) : 0;
+                        net_frac = net ? (powerup.net_frac !== undefined ? powerup.net_frac : fracs.net) : 0;
                         action = {
                             account: this.config_powerup.contract,
                             name: 'powerup',
@@ -189,8 +204,8 @@ var ResourcesManager = /** @class */ (function () {
                                     permission: this.permission || 'active',
                                 }],
                             data: {
-                                cpu_frac: cpu ? powerup.cpu_frac : 0,
-                                net_frac: net ? powerup.net_frac : 0,
+                                cpu_frac: cpu_frac,
+                                net_frac: net_frac,
                                 days: powerup.days,
                                 max_payment: (0, helpers_1.assetdataToString)(max_payment, symbol.name, symbol.precision),
                                 payer: this.account_name,
@@ -202,11 +217,10 @@ var ResourcesManager = /** @class */ (function () {
                             }, {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
-                            })
-                            // Set new last lend time
-                        ];
-                    case 6:
+                            })];
+                    case 8:
                         result = _a.sent();
+                        powerUpResult = ResourcesManager.getPowerUpResult(result);
                         dateNow = Date.now() // Use the exact same date for cpu and net
                         ;
                         if (cpu) {
@@ -215,23 +229,14 @@ var ResourcesManager = /** @class */ (function () {
                         if (net) {
                             this.net.lastLend = dateNow;
                         }
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)
-                            // Check balances
-                        ];
-                    case 7:
-                        _a.sent();
-                        return [4 /*yield*/, eos_api.getRPC().get_currency_balance(this.config_powerup.paymenttoken, this.account_name, this.dayCalculator.max_payment.symbol.name)];
-                    case 8:
-                        afterBalances = _a.sent();
-                        assetAfter = (0, helpers_1.stringToAsset)(afterBalances[0]);
-                        paymedAmount = assetBefore.amount - assetAfter.amount;
                         paid = void 0;
-                        if (paymedAmount < 0 || paymedAmount > max_payment) {
-                            paid = 'an unkown amount of tokens';
+                        if (powerUpResult) {
+                            paid = String(powerUpResult.fee);
+                            payment = (0, helpers_1.stringToAsset)(paid);
+                            this.dayCalculator.currentCosts += payment.amount;
                         }
                         else {
-                            this.dayCalculator.currentCosts += paymedAmount;
-                            paid = (0, helpers_1.assetdataToString)(paymedAmount, assetAfter.symbol.name, assetAfter.symbol.precision);
+                            paid = 'an unkown amount of tokens';
                         }
                         return [4 /*yield*/, this.telegram.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(TelegramMesseger_1.TgM.sToMd(paid), " by ").concat(TelegramMesseger_1.TgM.sToMd(this.account_name), " on ").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network)), true, true)];
                     case 9:
@@ -249,6 +254,29 @@ var ResourcesManager = /** @class */ (function () {
         });
     };
     /**
+     * Get power up result from a transaction result
+     * @param trxResult Transaction result of a powerup action
+     * @returns paid fee, powup_net and powup_cpu otherwise undefined
+     */
+    ResourcesManager.getPowerUpResult = function (trxResult) {
+        if ('processed' in trxResult && 'action_traces' in trxResult.processed && trxResult.processed.action_traces.length > 0) {
+            for (var _i = 0, _a = trxResult.processed.action_traces; _i < _a.length; _i++) {
+                var act_traces = _a[_i];
+                if ('act' in act_traces && act_traces.act.account == 'eosio' && act_traces.act.name == 'powerup') {
+                    for (var _b = 0, _c = act_traces.inline_traces; _b < _c.length; _b++) {
+                        var in_trace = _c[_b];
+                        if ('act' in in_trace && in_trace.act.account == 'eosio.reserv', in_trace.act.name == 'powupresult') {
+                            if ('fee' in in_trace.act.data && 'powup_net' in in_trace.act.data && 'powup_cpu' in in_trace.act.data) {
+                                return in_trace.act.data;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return undefined;
+    };
+    /**
      * Check to borrow resources before the lending time of old loan is over
      * @param eos_api Eosio API
      */
@@ -261,37 +289,120 @@ var ResourcesManager = /** @class */ (function () {
                         dateNow = Date.now();
                         cpu = (dateNow - this.cpu.lastLend) >= this.maxBorrowDuration;
                         net = (dateNow - this.net.lastLend) >= this.maxBorrowDuration;
-                        if (!(cpu || net)) return [3 /*break*/, 6];
+                        if (!(cpu || net)) return [3 /*break*/, 7];
                         tries = 0;
                         worked = false;
                         _a.label = 1;
                     case 1:
-                        if (!(tries < eos_api.endpointList.length && worked === false)) return [3 /*break*/, 4];
+                        if (!(tries < eos_api.endpointList.length && worked === false)) return [3 /*break*/, 5];
                         return [4 /*yield*/, this.borrow(eos_api, cpu, net)];
                     case 2:
                         worked = _a.sent();
                         tries++;
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
+                        return [4 /*yield*/, eos_api.nextEndpoint()];
                     case 3:
                         _a.sent();
-                        eos_api.nextEndpoint();
-                        return [3 /*break*/, 1];
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 4:
-                        if (!(worked === false)) return [3 /*break*/, 6];
+                        _a.sent();
+                        return [3 /*break*/, 1];
+                    case 5:
+                        if (!(worked === false)) return [3 /*break*/, 7];
                         return [4 /*yield*/, this.telegram.logError("\uD83D\uDEA8 *".concat(TelegramMesseger_1.TgM.sToMd(this.account_name), "* on *").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network), "* will give up to try to lend resources for an hour"), true, true)
                             // Disable lendig for an hour
                         ];
-                    case 5:
+                    case 6:
                         _a.sent();
                         timeshift = (dateNow - this.maxBorrowDuration) + 3600000;
                         this.cpu.lastLend = timeshift;
                         this.net.lastLend = timeshift;
-                        _a.label = 6;
-                    case 6: return [2 /*return*/];
+                        _a.label = 7;
+                    case 7: return [2 /*return*/];
                 }
             });
         });
     };
+    ResourcesManager.resource_to_frac = function (amount, limit, weight) {
+        var day_limit = limit * ResourcesManager.BlocksPerDay * ResourcesManager.BNPrecision;
+        var usage = Math.ceil(day_limit / weight);
+        var frac = Math.floor((amount / Number(usage)) * ResourcesManager.BNPrecision) / weight;
+        return Math.floor(frac * Math.pow(10, 15));
+    };
+    ResourcesManager.getPowerUpState = function (eos_api) {
+        return __awaiter(this, void 0, void 0, function () {
+            var tries, result, e_2;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        tries = 0;
+                        _a.label = 1;
+                    case 1:
+                        if (!(tries < eos_api.endpointList.length)) return [3 /*break*/, 8];
+                        _a.label = 2;
+                    case 2:
+                        _a.trys.push([2, 4, , 7]);
+                        return [4 /*yield*/, eos_api.getRPC().get_table_rows({
+                                json: true,
+                                code: 'eosio',
+                                table: 'powup.state'
+                                // Use no scope, "eosio" as scope will not work.
+                            })];
+                    case 3:
+                        result = _a.sent();
+                        if ('rows' in result && result.rows.length > 0) {
+                            return [2 /*return*/, result.rows[0]];
+                        }
+                        return [3 /*break*/, 7];
+                    case 4:
+                        e_2 = _a.sent();
+                        console.log("Error on getting entries from powup.state by ".concat(eos_api.getEndpoint()), e_2);
+                        return [4 /*yield*/, eos_api.nextEndpoint()];
+                    case 5:
+                        _a.sent();
+                        return [4 /*yield*/, (0, helpers_1.sleep)(1000)];
+                    case 6:
+                        _a.sent();
+                        return [3 /*break*/, 7];
+                    case 7:
+                        tries++;
+                        return [3 /*break*/, 1];
+                    case 8: throw ('No entries of powup.state found');
+                }
+            });
+        });
+    };
+    /**
+     * Calculate frac parameters of EOSIO power up action by micro seconds of CPU and byte amount of NET
+     * @param eos_api EOSIO API
+     * @param cpu_us Amount of CPU to lend
+     * @param net_byte Amount of NET to lend
+     * @returns cpu_frac and net_frac
+     */
+    ResourcesManager.calcFrecs = function (eos_api, cpu_us, net_byte) {
+        return __awaiter(this, void 0, void 0, function () {
+            var state, info;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0: return [4 /*yield*/, ResourcesManager.getPowerUpState(eos_api)];
+                    case 1:
+                        state = _a.sent();
+                        if (state.version != 0) {
+                            throw ('Error wrong version of power up state');
+                        }
+                        info = eos_api.get_lastInfo();
+                        if (info == null) {
+                            return [2 /*return*/, { cpu: 0, net: 0 }];
+                        }
+                        return [2 /*return*/, {
+                                cpu: cpu_us == 0 ? 0 : ResourcesManager.resource_to_frac(cpu_us, info.block_cpu_limit, Number(state.cpu.weight)),
+                                net: net_byte == 0 ? 0 : ResourcesManager.resource_to_frac(net_byte, info.block_net_limit, Number(state.net.weight))
+                            }];
+                }
+            });
+        });
+    };
+    ResourcesManager.BNPrecision = 1000000;
+    ResourcesManager.BlocksPerDay = 2 * 24 * 60 * 60;
     return ResourcesManager;
 }());
 exports.ResourcesManager = ResourcesManager;
