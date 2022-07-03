@@ -138,7 +138,7 @@ var ResourcesManager = /** @class */ (function () {
         if (cpu === void 0) { cpu = false; }
         if (net === void 0) { net = false; }
         return __awaiter(this, void 0, void 0, function () {
-            var powerup, max_payment, symbol, balances, balance, assetBefore, cpu_us, net_bytes, fracs, cpu_frac, net_frac, action, result, powerUpResult, dateNow, paid, payment, e_1;
+            var powerup, max_payment, symbol, balances, balance, assetBefore, cpu_us, net_kilo_bytes, fracs, cpu_frac, net_frac, action, result, powerUpResult, dateNow, paid, payment, e_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -186,10 +186,10 @@ var ResourcesManager = /** @class */ (function () {
                         _a.label = 5;
                     case 5:
                         cpu_us = typeof powerup.cpu ? Number(powerup.cpu) : 0;
-                        net_bytes = typeof powerup.net ? Number(powerup.net) : 0;
+                        net_kilo_bytes = typeof powerup.net ? Math.round(Number(powerup.net) / 1000) : 0;
                         fracs = { cpu: 0, net: 0 };
                         if (!(powerup.cpu_frac == undefined || powerup.net_frac == undefined)) return [3 /*break*/, 7];
-                        return [4 /*yield*/, ResourcesManager.calcFrecs(eos_api, cpu_us, net_bytes)];
+                        return [4 /*yield*/, ResourcesManager.calcFrecs(eos_api, cpu_us, net_kilo_bytes)];
                     case 6:
                         fracs = _a.sent();
                         _a.label = 7;

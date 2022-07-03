@@ -174,10 +174,10 @@ export class ResourcesManager {
 
             // Get cpu_frac and net_frac for power up
             const cpu_us = typeof powerup.cpu? Number(powerup.cpu) : 0
-            const net_bytes = typeof powerup.net? Number(powerup.net) : 0
+            const net_kilo_bytes = typeof powerup.net? Math.round(Number(powerup.net) / 1000) : 0
             let fracs = {cpu: 0, net: 0}
             if(powerup.cpu_frac == undefined || powerup.net_frac == undefined){
-                fracs = await ResourcesManager.calcFrecs(eos_api, cpu_us, net_bytes)
+                fracs = await ResourcesManager.calcFrecs(eos_api, cpu_us, net_kilo_bytes)
             }
             const cpu_frac = cpu? (powerup.cpu_frac !== undefined? powerup.cpu_frac: fracs.cpu): 0
             const net_frac = net? (powerup.net_frac !== undefined? powerup.net_frac: fracs.net) : 0

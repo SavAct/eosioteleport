@@ -45,13 +45,13 @@ module.exports = {
         contract: 'eosio',       // Contract which provides the powerup action
         paymenttoken: 'eosio.token', // System token contract
         days: 1,                 // Days the CPU and NET will be borrowed for on request. Currently only 1 day is possible on EOS mainnet.
-        cpu: 2000,              // Lend micro seconds of CPU will borrowed per day and when needed
-        net: 100,               // Lend kilo bytes of NET will borrowed per day and when needed
+        cpu: 2000,               // Lend micro seconds of CPU will borrowed per day and when needed
+        net: 100000,             // Lend bytes of NET will borrowed per day and when needed
         // cpu_frac: 30000000,       // If this is setted, cpu parameter will be ignored. Fraction of total available CPU time = 10^15 / cpu_frac which will borrowed per day when needed
         // net_frac: 4000000,        // If this is setted, net parameter will be ignored. Fraction of total available NET time = 10^15 / cpu_frac which will borrowed per day when needed
-        max_payment: '0.2000 EOS',  // Maximum amount which would be paid per day of a running instance (The right number of decimal places is important)
+        max_payment: '0.2000 EOS',   // Maximum amount which would be paid per day of a running instance (The right number of decimal places is important)
 
         min_cpu: 1200,           // Rent CPU if available CPU resource is below this number (Powerup may consume arroud 800 CPU)
-        min_net: 500,            // Rent NET if available NET resource is below this number (Powerup may consume arroud 200 NET)
+        min_net: 500,              // Rent NET if available NET resource is below this number (Powerup may consume arroud 200 NET)
     }
 }
