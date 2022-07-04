@@ -13,7 +13,7 @@ import { ConfigType, eosio_claim_data, eosio_teleport_data } from './CommonTypes
 import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 import { EosApi, EthApi } from './EndpointSwitcher'
-import {sleep, hexToString, WaitWithAnimation, assetdataToString, stringToAsset, Asset} from '../scripts/helpers'
+import {sleep, hexToString, WaitWithAnimation, assetdataToString, save_number_to_file, load_number_from_file} from '../scripts/helpers'
 import { RpcError } from 'eosjs'
 import { TgM } from './TelegramMesseger'
 import { ResourcesManager } from './ResourcenManager'
@@ -268,10 +268,6 @@ class EthOracle {
         }
     }
 
-    static async save_block_to_file(block_num: number, blocks_file: string){
-        fs.writeFileSync(blocks_file, block_num.toString())
-    }
-
     /**
      * Check for "claimed" events and store them on eosio chain
      * @param from_block Block number to start looking for events
@@ -482,24 +478,6 @@ class EthOracle {
     }
 
     /**
-     * Loads a block number from a saved file if one exists or throws an error.
-     * @returns a saved block number from a file
-     */
-    static async load_block_number_from_file(blocks_file: string) {
-        //   let block_number: string | number = 'latest'
-        if (!fs.existsSync(blocks_file))
-            throw new Error('block file does not exist.')
-
-        const file_contents = fs.readFileSync(blocks_file).toString()
-        if (!file_contents) throw new Error('No blocks file')
-
-        const block_number = parseInt(file_contents)
-        if (isNaN(block_number)) throw new Error('No block number in file.')
-
-        return block_number
-    }
-
-    /**
      * Get latest block of eth blockchain
      * @returns latest block number
      */
@@ -555,7 +533,7 @@ class EthOracle {
                             from_block = start_ref
                         } else {
                             try {
-                                from_block = await EthOracle.load_block_number_from_file(this.blocks_file_name)
+                                from_block = await load_number_from_file(this.blocks_file_name)
                                 from_block -= 50                     // for fresh start go back 50 blocks
                                 if(this.config.eth.genesisBlock && this.config.eth.genesisBlock > from_block){
                                     from_block = this.config.eth.genesisBlock
@@ -587,7 +565,7 @@ class EthOracle {
                         await this.process_claimed(from_block, to_block, trxBroadcast)
                         await this.process_teleported(from_block, to_block, trxBroadcast)
                         from_block = to_block                                               // In next round the current to block is the from block
-                        await EthOracle.save_block_to_file(to_block, this.blocks_file_name) // Save last block received
+                        await save_number_to_file(to_block, this.blocks_file_name) // Save last block received
                     } else {
                         console.log(`⚡️ From block ${from_block} is higher than to block ${to_block}`)
                         await sleep(10000)
@@ -595,7 +573,7 @@ class EthOracle {
                     if (latest_block - from_block <= 1000) {
                         await WaitWithAnimation(waitCycle, 'Wait for new blocks...')
                     } else {
-                        console.log(`Latest block is ${latest_block}. Not waiting...`)
+                        console.log(`Will not wait because the latest block is ${latest_block}`)
                     }
                     tries = 0
                 } catch (e: any) {

@@ -11,9 +11,9 @@ import { JsSignatureProvider } from 'eosjs/dist/eosjs-jssig'
 import { TextDecoder, TextEncoder } from 'text-encoding'
 import { ecsign, keccak, toRpcSig } from 'ethereumjs-util'
 import { EosApi } from './EndpointSwitcher'
-import { ConfigType, PowerUp, TeleportTableEntry } from './CommonTypes'
-import yargs, { check, number } from 'yargs'
-import {sleep, toHexString, fromHexString, WaitWithAnimation, stringToAsset, Asset, assetdataToString} from '../scripts/helpers'
+import { ConfigType, TeleportTableEntry } from './CommonTypes'
+import yargs from 'yargs'
+import {sleep, toHexString, fromHexString, WaitWithAnimation, save_number_to_file, load_number_from_file} from '../scripts/helpers'
 import { TgM } from './TelegramMesseger'
 import { ResourcesManager } from './ResourcenManager'
 
@@ -32,7 +32,12 @@ class EosOracle {
     private telegram: TgM
     private rsManager: ResourcesManager
 
+    private id_file_name: string
+
+    
     constructor(private config: ConfigType, private signatureProvider: JsSignatureProvider, private force: boolean){
+        this.id_file_name = `.oracle_${config.eos.network}_id-${config.eos.oracleAccount}`
+        
         this.telegram = new TgM(config.telegram)
         
         this.eos_api = new EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider)
@@ -390,8 +395,13 @@ class EosOracle {
             lastHandledId = item.id + 1
         }
         
-        // Set next teleport id and get the next teleports
-        signProcessData.lowerId = lastHandledId
+        // Set and store the next teleport id
+        if(lastHandledId != signProcessData.lowerId){
+            await save_number_to_file(lastHandledId, this.id_file_name)
+            signProcessData.lowerId = lastHandledId
+        }
+
+        // Get the next teleports
         if(this.running){
             if(waitForIrr > 0){
                 // Wait maximal 180 seconds
@@ -413,8 +423,20 @@ class EosOracle {
      * @param id Teleport id to start from
      * @param requestAmount Amount of requested teleports per request
      */
-    async run(id = 0, requestAmount = 100, waitCycle = EosOracle.maxWait){
-        await this.telegram.logViaBot(`Starting *${TgM.sToMd(this.config.eos.network)}* oracle with *${TgM.sToMd(this.config.eos.oracleAccount)}* 🏃`, true, true)
+    async run(id: undefined | number = undefined, requestAmount = 100, waitCycle = EosOracle.maxWait){
+        // Get last id from file if it is undefined
+        if(id === undefined){
+            try{
+                id = await load_number_from_file(this.id_file_name) - 100 // Minus 100 for safety
+                if(id < 0){
+                    id = 0
+                }
+            } catch(e){
+                id = 0
+            }
+        }
+
+        await this.telegram.logViaBot(`Starting *${TgM.sToMd(this.config.eos.network)}* oracle with *${TgM.sToMd(this.config.eos.oracleAccount)}* beginning by *id ${TgM.sToMd(id.toString())}* 🏃`, true, true)
 
         // Create an object to change the current id on each run
         this.running = true

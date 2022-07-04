@@ -1,3 +1,5 @@
+import fs from 'fs'
+
 export interface Asset{amount: bigint, symbol: {precision:number, name:string}}
 
 /**
@@ -113,4 +115,34 @@ export const WaitWithAnimation = async (s: number, info: string = '') => {
         console.log(info)
         await sleep(s*1000)
     }
+}
+
+
+/**
+ * Load a number from file if it exists
+ * @param file Path with name of the file
+ * @returns a saved id number otherwise throw an error
+ */
+export const load_number_from_file = async (file: string) => {
+    //   let block_number: string | number = 'latest'
+    if (!fs.existsSync(file)){
+        throw new Error('File does not exist')
+    }
+
+    const file_contents = fs.readFileSync(file).toString()
+    if (!file_contents) throw new Error('No content in file')
+
+    const block_number = parseInt(file_contents)
+    if (isNaN(block_number)) throw new Error('No number in file')
+
+    return block_number
+}
+
+/**
+ * Save a number to a file
+ * @param num Number which should be stored
+ * @param file Name of the file
+ */
+export const save_number_to_file = async (num: number, file: string) => {
+    fs.writeFileSync(file, num.toString())
 }

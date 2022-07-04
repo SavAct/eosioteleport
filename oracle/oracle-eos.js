@@ -61,6 +61,7 @@ var EosOracle = /** @class */ (function () {
         this.force = force;
         this.running = false;
         this.irreversible_time = 0;
+        this.id_file_name = ".oracle_".concat(config.eos.network, "_id-").concat(config.eos.oracleAccount);
         this.telegram = new TelegramMesseger_1.TgM(config.telegram);
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api);
@@ -513,29 +514,34 @@ var EosOracle = /** @class */ (function () {
                         rowIndex++;
                         return [3 /*break*/, 2];
                     case 10:
-                        // Set next teleport id and get the next teleports
+                        if (!(lastHandledId != signProcessData.lowerId)) return [3 /*break*/, 12];
+                        return [4 /*yield*/, (0, helpers_1.save_number_to_file)(lastHandledId, this.id_file_name)];
+                    case 11:
+                        _b.sent();
                         signProcessData.lowerId = lastHandledId;
-                        if (!this.running) return [3 /*break*/, 15];
-                        if (!(waitForIrr > 0)) return [3 /*break*/, 13];
+                        _b.label = 12;
+                    case 12:
+                        if (!this.running) return [3 /*break*/, 17];
+                        if (!(waitForIrr > 0)) return [3 /*break*/, 15];
                         // Wait maximal 180 seconds
                         if (waitForIrr > EosOracle.maxWait) {
                             waitForIrr = EosOracle.maxWait;
                         }
                         console.log("Wait ".concat(waitForIrr, " seconds until teleport id ").concat(signProcessData.lowerId, " is irreversible."));
                         return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitForIrr)];
-                    case 11:
-                        _b.sent();
-                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
-                    case 12:
-                        _b.sent();
-                        return [3 /*break*/, 15];
                     case 13:
-                        if (!(chain_data.more == true)) return [3 /*break*/, 15];
+                        _b.sent();
                         return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
                     case 14:
                         _b.sent();
-                        _b.label = 15;
-                    case 15: return [2 /*return*/];
+                        return [3 /*break*/, 17];
+                    case 15:
+                        if (!(chain_data.more == true)) return [3 /*break*/, 17];
+                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
+                    case 16:
+                        _b.sent();
+                        _b.label = 17;
+                    case 17: return [2 /*return*/];
                 }
             });
         });
@@ -546,59 +552,75 @@ var EosOracle = /** @class */ (function () {
      * @param requestAmount Amount of requested teleports per request
      */
     EosOracle.prototype.run = function (id, requestAmount, waitCycle) {
-        if (id === void 0) { id = 0; }
+        if (id === void 0) { id = undefined; }
         if (requestAmount === void 0) { requestAmount = 100; }
         if (waitCycle === void 0) { waitCycle = EosOracle.maxWait; }
         return __awaiter(this, void 0, void 0, function () {
-            var signProcessData, e_4;
+            var e_4, signProcessData, e_5;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0: return [4 /*yield*/, this.telegram.logViaBot("Starting *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* \uD83C\uDFC3"), true, true)
+                    case 0:
+                        if (!(id === undefined)) return [3 /*break*/, 4];
+                        _a.label = 1;
+                    case 1:
+                        _a.trys.push([1, 3, , 4]);
+                        return [4 /*yield*/, (0, helpers_1.load_number_from_file)(this.id_file_name)];
+                    case 2:
+                        id = (_a.sent()) - 100; // Minus 100 for safety
+                        if (id < 0) {
+                            id = 0;
+                        }
+                        return [3 /*break*/, 4];
+                    case 3:
+                        e_4 = _a.sent();
+                        id = 0;
+                        return [3 /*break*/, 4];
+                    case 4: return [4 /*yield*/, this.telegram.logViaBot("Starting *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* beginning by *id ").concat(TelegramMesseger_1.TgM.sToMd(id.toString()), "* \uD83C\uDFC3"), true, true)
                         // Create an object to change the current id on each run
                     ];
-                    case 1:
+                    case 5:
                         _a.sent();
                         // Create an object to change the current id on each run
                         this.running = true;
-                        _a.label = 2;
-                    case 2:
-                        _a.trys.push([2, 10, , 12]);
-                        signProcessData = { lowerId: id, amount: requestAmount };
-                        _a.label = 3;
-                    case 3:
-                        if (!this.running) return [3 /*break*/, 9];
-                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 4:
-                        _a.sent();
-                        return [4 /*yield*/, this.updateTimes()];
-                    case 5:
-                        _a.sent();
-                        return [4 /*yield*/, this.rsManager.checkBorrowTimeOut(this.eos_api)];
+                        _a.label = 6;
                     case 6:
-                        _a.sent();
-                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
+                        _a.trys.push([6, 14, , 16]);
+                        signProcessData = { lowerId: id, amount: requestAmount };
+                        _a.label = 7;
                     case 7:
-                        _a.sent();
-                        return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitCycle, 'All available teleports signed')];
+                        if (!this.running) return [3 /*break*/, 13];
+                        return [4 /*yield*/, this.eos_api.nextEndpoint()];
                     case 8:
                         _a.sent();
-                        return [3 /*break*/, 3];
-                    case 9: return [3 /*break*/, 12];
+                        return [4 /*yield*/, this.updateTimes()];
+                    case 9:
+                        _a.sent();
+                        return [4 /*yield*/, this.rsManager.checkBorrowTimeOut(this.eos_api)];
                     case 10:
-                        e_4 = _a.sent();
-                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \n").concat(String(e_4)))];
+                        _a.sent();
+                        return [4 /*yield*/, this.signAllTeleportsUntilNow(signProcessData)];
                     case 11:
                         _a.sent();
-                        return [3 /*break*/, 12];
-                    case 12: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* \uD83D\uDC80"), true, true)];
-                    case 13:
+                        return [4 /*yield*/, (0, helpers_1.WaitWithAnimation)(waitCycle, 'All available teleports signed')];
+                    case 12:
                         _a.sent();
-                        if (!this.telegram.isTelegram()) return [3 /*break*/, 15];
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
+                        return [3 /*break*/, 7];
+                    case 13: return [3 /*break*/, 16];
                     case 14:
+                        e_5 = _a.sent();
+                        return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eos.network, " \n").concat(String(e_5)))];
+                    case 15:
+                        _a.sent();
+                        return [3 /*break*/, 16];
+                    case 16: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* \uD83D\uDC80"), true, true)];
+                    case 17:
+                        _a.sent();
+                        if (!this.telegram.isTelegram()) return [3 /*break*/, 19];
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
+                    case 18:
                         _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real
-                        _a.label = 15;
-                    case 15: return [2 /*return*/];
+                        _a.label = 19;
+                    case 19: return [2 /*return*/];
                 }
             });
         });

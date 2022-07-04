@@ -59,23 +59,25 @@ var ResourcesManager = /** @class */ (function () {
         };
         this.account_name = '';
         this.permission = 'active';
-        this.maxBorrowDuration = (24 * 60 * 60 * 1000) - (30 * 60 * 1000); // have to be less than 24h
-        if (config_powerup) {
+        this.maxBorrowDuration = 24 * 60 * 60 * 1000; // default will be overwritten in constructor
+        this.net_file_name = '';
+        this.cpu_file_name = '';
+        if (this.config_powerup) {
             this.account_name = eosio.oracleAccount;
             if (eosio.oraclePermission) {
                 this.permission = eosio.oraclePermission;
             }
             // Check some config data
-            var asset = (0, helpers_1.stringToAsset)(config_powerup.max_payment);
+            var asset = (0, helpers_1.stringToAsset)(this.config_powerup.max_payment);
             if (asset.amount != BigInt(0) && typeof asset.symbol.precision != 'number' && asset.symbol.name.length > 0) {
                 throw ('Wrong definition of lend.max_payment');
             }
             // Further checks if it is the EOS network
             if (eosio.netId == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906') {
-                if (config_powerup.contract != 'eosio') {
+                if (this.config_powerup.contract != 'eosio') {
                     throw ('Wrong powerup contract');
                 }
-                if (config_powerup.paymenttoken != 'eosio.token') {
+                if (this.config_powerup.paymenttoken != 'eosio.token') {
                     throw ('Wrong system token symbol for powerup');
                 }
                 if (asset.symbol.name != 'EOS') {
@@ -86,21 +88,25 @@ var ResourcesManager = /** @class */ (function () {
                 }
             }
             this.dayCalculator.max_payment = asset;
-            if (this.config_powerup) {
-                this.config_powerup.cpu = typeof this.config_powerup.cpu ? Number(this.config_powerup.cpu) : 0;
-                this.config_powerup.net = typeof this.config_powerup.net ? Number(this.config_powerup.net) : 0;
+            this.config_powerup.cpu = typeof this.config_powerup.cpu ? Number(this.config_powerup.cpu) : 0;
+            this.config_powerup.net = typeof this.config_powerup.net ? Number(this.config_powerup.net) : 0;
+            // Set file names to load and store last resource lend time
+            this.cpu_file_name = ".oracle_".concat(eosio.network, "_cpu-").concat(eosio.oracleAccount);
+            this.net_file_name = ".oracle_".concat(eosio.network, "_net-").concat(eosio.oracleAccount);
+            // Calculate a time when it is time to borrow new resources
+            if (typeof this.config_powerup.days != 'number') {
+                this.config_powerup.days = 1;
             }
+            var minBeforePowerUpExpires = 30 * 60 * 1000;
+            this.maxBorrowDuration = (this.config_powerup.days * 24 * 60 * 60 * 1000) - minBeforePowerUpExpires;
         }
-        // Set the initial last borrowing time. It is in one tenth of the time after the initial start.
-        // This prevents the loan of new resources over and over again if the oracle keeps crashing at the beginning.
-        var toTenthDuration = Date.now() - Math.round((9 * this.maxBorrowDuration) / 10);
         this.cpu = {
             available: 0,
-            lastLend: toTenthDuration
+            lastLend: undefined
         };
         this.net = {
             available: 0,
-            lastLend: toTenthDuration
+            lastLend: undefined
         };
     }
     ResourcesManager.prototype.isManager = function () {
@@ -164,7 +170,7 @@ var ResourcesManager = /** @class */ (function () {
                         _a.sent();
                         return [2 /*return*/];
                     case 2:
-                        _a.trys.push([2, 10, , 12]);
+                        _a.trys.push([2, 14, , 16]);
                         return [4 /*yield*/, eos_api.getRPC().get_currency_balance(this.config_powerup.paymenttoken, this.account_name, this.dayCalculator.max_payment.symbol.name)];
                     case 3:
                         balances = (_a.sent());
@@ -223,12 +229,20 @@ var ResourcesManager = /** @class */ (function () {
                         powerUpResult = ResourcesManager.getPowerUpResult(result);
                         dateNow = Date.now() // Use the exact same date for cpu and net
                         ;
-                        if (cpu) {
-                            this.cpu.lastLend = dateNow;
-                        }
-                        if (net) {
-                            this.net.lastLend = dateNow;
-                        }
+                        if (!cpu) return [3 /*break*/, 10];
+                        this.cpu.lastLend = dateNow;
+                        return [4 /*yield*/, (0, helpers_1.save_number_to_file)(dateNow, this.cpu_file_name)];
+                    case 9:
+                        _a.sent();
+                        _a.label = 10;
+                    case 10:
+                        if (!net) return [3 /*break*/, 12];
+                        this.net.lastLend = dateNow;
+                        return [4 /*yield*/, (0, helpers_1.save_number_to_file)(dateNow, this.net_file_name)];
+                    case 11:
+                        _a.sent();
+                        _a.label = 12;
+                    case 12:
                         paid = void 0;
                         if (powerUpResult) {
                             paid = String(powerUpResult.fee);
@@ -239,16 +253,16 @@ var ResourcesManager = /** @class */ (function () {
                             paid = 'an unkown amount of tokens';
                         }
                         return [4 /*yield*/, this.telegram.logCosts("Borrowed ".concat(cpu ? 'CPU ' : '').concat(cpu && net ? 'and ' : '').concat(net ? 'NET ' : '', "for ").concat(TelegramMesseger_1.TgM.sToMd(paid), " by ").concat(TelegramMesseger_1.TgM.sToMd(this.account_name), " on ").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network)), true, true)];
-                    case 9:
+                    case 13:
                         _a.sent();
                         return [2 /*return*/, true];
-                    case 10:
+                    case 14:
                         e_1 = _a.sent();
                         return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.account_name, " on ").concat(this.eosio.network, " \n").concat(String(e_1)))];
-                    case 11:
+                    case 15:
                         _a.sent();
                         return [2 /*return*/, false];
-                    case 12: return [2 /*return*/];
+                    case 16: return [2 /*return*/];
                 }
             });
         });
@@ -277,47 +291,93 @@ var ResourcesManager = /** @class */ (function () {
         return undefined;
     };
     /**
+     * Determine whether resources should be borrowed or not
+     * @returns boolean for cpu and net
+     */
+    ResourcesManager.prototype.shouldBorrow = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var _a, e_2, _b, e_3, dateNow;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        if (!(this.cpu.lastLend === undefined)) return [3 /*break*/, 4];
+                        _c.label = 1;
+                    case 1:
+                        _c.trys.push([1, 3, , 4]);
+                        _a = this.cpu;
+                        return [4 /*yield*/, (0, helpers_1.load_number_from_file)(this.cpu_file_name)];
+                    case 2:
+                        _a.lastLend = _c.sent();
+                        return [3 /*break*/, 4];
+                    case 3:
+                        e_2 = _c.sent();
+                        this.cpu.lastLend = undefined;
+                        return [3 /*break*/, 4];
+                    case 4:
+                        if (!(this.net.lastLend === undefined)) return [3 /*break*/, 8];
+                        _c.label = 5;
+                    case 5:
+                        _c.trys.push([5, 7, , 8]);
+                        _b = this.net;
+                        return [4 /*yield*/, (0, helpers_1.load_number_from_file)(this.net_file_name)];
+                    case 6:
+                        _b.lastLend = _c.sent();
+                        return [3 /*break*/, 8];
+                    case 7:
+                        e_3 = _c.sent();
+                        this.net.lastLend = undefined;
+                        return [3 /*break*/, 8];
+                    case 8:
+                        dateNow = Date.now();
+                        return [2 /*return*/, {
+                                cpu: this.cpu.lastLend === undefined ? true : ((dateNow - this.cpu.lastLend) >= this.maxBorrowDuration),
+                                net: this.net.lastLend === undefined ? true : ((dateNow - this.net.lastLend) >= this.maxBorrowDuration)
+                            }];
+                }
+            });
+        });
+    };
+    /**
      * Check to borrow resources before the lending time of old loan is over
      * @param eos_api Eosio API
      */
     ResourcesManager.prototype.checkBorrowTimeOut = function (eos_api) {
         return __awaiter(this, void 0, void 0, function () {
-            var dateNow, cpu, net, tries, worked, timeshift;
+            var should, tries, worked, timeshift;
             return __generator(this, function (_a) {
                 switch (_a.label) {
-                    case 0:
-                        dateNow = Date.now();
-                        cpu = (dateNow - this.cpu.lastLend) >= this.maxBorrowDuration;
-                        net = (dateNow - this.net.lastLend) >= this.maxBorrowDuration;
-                        if (!(cpu || net)) return [3 /*break*/, 7];
+                    case 0: return [4 /*yield*/, this.shouldBorrow()];
+                    case 1:
+                        should = _a.sent();
+                        if (!(should.cpu || should.net)) return [3 /*break*/, 8];
                         tries = 0;
                         worked = false;
-                        _a.label = 1;
-                    case 1:
-                        if (!(tries < eos_api.endpointList.length && worked === false)) return [3 /*break*/, 5];
-                        return [4 /*yield*/, this.borrow(eos_api, cpu, net)];
+                        _a.label = 2;
                     case 2:
+                        if (!(tries < eos_api.endpointList.length && worked === false)) return [3 /*break*/, 6];
+                        return [4 /*yield*/, this.borrow(eos_api, should.cpu, should.net)];
+                    case 3:
                         worked = _a.sent();
                         tries++;
                         return [4 /*yield*/, eos_api.nextEndpoint()];
-                    case 3:
-                        _a.sent();
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 4:
                         _a.sent();
-                        return [3 /*break*/, 1];
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 5:
-                        if (!(worked === false)) return [3 /*break*/, 7];
+                        _a.sent();
+                        return [3 /*break*/, 2];
+                    case 6:
+                        if (!(worked === false)) return [3 /*break*/, 8];
                         return [4 /*yield*/, this.telegram.logError("\uD83D\uDEA8 *".concat(TelegramMesseger_1.TgM.sToMd(this.account_name), "* on *").concat(TelegramMesseger_1.TgM.sToMd(this.eosio.network), "* will give up to try to lend resources for an hour"), true, true)
                             // Disable lendig for an hour
                         ];
-                    case 6:
+                    case 7:
                         _a.sent();
-                        timeshift = (dateNow - this.maxBorrowDuration) + 3600000;
+                        timeshift = (Date.now() - this.maxBorrowDuration) + 3600000;
                         this.cpu.lastLend = timeshift;
                         this.net.lastLend = timeshift;
-                        _a.label = 7;
-                    case 7: return [2 /*return*/];
+                        _a.label = 8;
+                    case 8: return [2 /*return*/];
                 }
             });
         });
@@ -330,7 +390,7 @@ var ResourcesManager = /** @class */ (function () {
     };
     ResourcesManager.getPowerUpState = function (eos_api) {
         return __awaiter(this, void 0, void 0, function () {
-            var tries, result, e_2;
+            var tries, result, e_4;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -354,8 +414,8 @@ var ResourcesManager = /** @class */ (function () {
                         }
                         return [3 /*break*/, 7];
                     case 4:
-                        e_2 = _a.sent();
-                        console.log("Error on getting entries from powup.state by ".concat(eos_api.getEndpoint()), e_2);
+                        e_4 = _a.sent();
+                        console.log("Error on getting entries from powup.state by ".concat(eos_api.getEndpoint()), e_4);
                         return [4 /*yield*/, eos_api.nextEndpoint()];
                     case 5:
                         _a.sent();

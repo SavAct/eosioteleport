@@ -1,4 +1,4 @@
-import { Asset, assetdataToString, sleep, stringToAsset } from '../scripts/helpers'
+import { Asset, assetdataToString, load_number_from_file, save_number_to_file, sleep, stringToAsset } from '../scripts/helpers'
 import { ConfigType, PowerUp } from './CommonTypes'
 import { TgM } from './TelegramMesseger'
 import { EosApi } from './EndpointSwitcher'
@@ -6,7 +6,7 @@ import { TransactResult } from 'eosjs/dist/eosjs-api-interfaces'
 
 interface Ressource {
     available: number
-    lastLend: number
+    lastLend: number | undefined
 }
 
 interface RawResourceState {
@@ -43,11 +43,13 @@ export class ResourcesManager {
     private account_name: string = ''
     private permission: string ='active'
 
-    private maxBorrowDuration = (24 * 60 * 60 * 1000) - (30 * 60 * 1000)    // have to be less than 24h
+    private maxBorrowDuration: number = 24 * 60 * 60 * 1000 // default will be overwritten in constructor
 
     private cpu : Ressource
     private net : Ressource
 
+    private net_file_name: string = ''
+    private cpu_file_name: string = ''
 
     /**
      * 
@@ -57,23 +59,23 @@ export class ResourcesManager {
      * @param eos_api EOSIO API object
      */
     constructor(private config_powerup: PowerUp | undefined, private eosio: ConfigType["eos"], private telegram: TgM, eos_api: EosApi){
-        if(config_powerup){
+        if(this.config_powerup){
             this.account_name = eosio.oracleAccount
             if(eosio.oraclePermission){
                 this.permission = eosio.oraclePermission
             }
             
             // Check some config data
-            const asset = stringToAsset(config_powerup.max_payment)
+            const asset = stringToAsset(this.config_powerup.max_payment)
             if(asset.amount != BigInt(0) && typeof asset.symbol.precision != 'number' && asset.symbol.name.length > 0){
                 throw('Wrong definition of lend.max_payment')
             }
             // Further checks if it is the EOS network
             if(eosio.netId == 'aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906'){
-                if(config_powerup.contract != 'eosio'){
+                if(this.config_powerup.contract != 'eosio'){
                     throw('Wrong powerup contract')
                 }
-                if(config_powerup.paymenttoken != 'eosio.token'){
+                if(this.config_powerup.paymenttoken != 'eosio.token'){
                     throw('Wrong system token symbol for powerup')
                 }
                 if(asset.symbol.name != 'EOS'){
@@ -85,23 +87,28 @@ export class ResourcesManager {
             }
 
             this.dayCalculator.max_payment = asset
+            this.config_powerup.cpu = typeof this.config_powerup.cpu? Number(this.config_powerup.cpu) : 0
+            this.config_powerup.net = typeof this.config_powerup.net? Number(this.config_powerup.net) : 0
             
-            if(this.config_powerup){
-                this.config_powerup.cpu = typeof this.config_powerup.cpu? Number(this.config_powerup.cpu) : 0
-                this.config_powerup.net = typeof this.config_powerup.net? Number(this.config_powerup.net) : 0
+            // Set file names to load and store last resource lend time
+            this.cpu_file_name = `.oracle_${eosio.network}_cpu-${eosio.oracleAccount}`
+            this.net_file_name = `.oracle_${eosio.network}_net-${eosio.oracleAccount}`
+
+            // Calculate a time when it is time to borrow new resources
+            if(typeof this.config_powerup.days != 'number'){
+                this.config_powerup.days = 1
             }
+            const minBeforePowerUpExpires = 30 * 60 * 1000
+            this.maxBorrowDuration = (this.config_powerup.days * 24 * 60 * 60 * 1000) - minBeforePowerUpExpires
         }
 
-        // Set the initial last borrowing time. It is in one tenth of the time after the initial start.
-        // This prevents the loan of new resources over and over again if the oracle keeps crashing at the beginning.
-        const toTenthDuration = Date.now() - Math.round((9 * this.maxBorrowDuration) / 10)
         this.cpu = {
             available: 0,
-            lastLend: toTenthDuration
+            lastLend: undefined
         }
         this.net = {
             available: 0,
-            lastLend: toTenthDuration
+            lastLend: undefined
         }
     }
 
@@ -212,9 +219,11 @@ export class ResourcesManager {
             const dateNow = Date.now()  // Use the exact same date for cpu and net
             if(cpu){
                 this.cpu.lastLend = dateNow
+                await save_number_to_file(dateNow, this.cpu_file_name)
             }
             if(net){
                 this.net.lastLend = dateNow
+                await save_number_to_file(dateNow, this.net_file_name)
             }
 
             let paid : string
@@ -256,19 +265,43 @@ export class ResourcesManager {
     }
 
     /**
+     * Determine whether resources should be borrowed or not
+     * @returns boolean for cpu and net
+     */
+    async shouldBorrow(){
+        if(this.cpu.lastLend === undefined){
+            try{
+                this.cpu.lastLend = await load_number_from_file(this.cpu_file_name)
+            } catch (e) {
+                this.cpu.lastLend = undefined
+            }
+        }  
+        if(this.net.lastLend === undefined){
+            try{
+                this.net.lastLend = await load_number_from_file(this.net_file_name)
+            } catch (e) {
+                this.net.lastLend = undefined
+            }
+        }
+        const dateNow = Date.now()
+        return {
+            cpu: this.cpu.lastLend === undefined? true : ((dateNow - this.cpu.lastLend) >= this.maxBorrowDuration),
+            net: this.net.lastLend === undefined? true : ((dateNow - this.net.lastLend) >= this.maxBorrowDuration)
+        }
+    }
+
+    /**
      * Check to borrow resources before the lending time of old loan is over
      * @param eos_api Eosio API
      */
     async checkBorrowTimeOut(eos_api: EosApi) {
-        const dateNow = Date.now()
-        const cpu = (dateNow - this.cpu.lastLend) >= this.maxBorrowDuration
-        const net = (dateNow - this.net.lastLend) >= this.maxBorrowDuration
+        const should = await this.shouldBorrow()
         
-        if(cpu || net){
+        if(should.cpu || should.net){
             let tries = 0
             let worked : boolean | undefined = false
             while(tries < eos_api.endpointList.length && worked === false){
-                worked = await this.borrow(eos_api, cpu, net)
+                worked = await this.borrow(eos_api, should.cpu, should.net)
                 tries++
                 await eos_api.nextEndpoint()
                 await sleep(5000)
@@ -277,7 +310,7 @@ export class ResourcesManager {
                 await this.telegram.logError(`🚨 *${TgM.sToMd(this.account_name)}* on *${TgM.sToMd(this.eosio.network)}* will give up to try to lend resources for an hour`, true, true)
                 
                 // Disable lendig for an hour
-                const timeshift = (dateNow - this.maxBorrowDuration) + 3600000
+                const timeshift = (Date.now() - this.maxBorrowDuration) + 3600000
                 this.cpu.lastLend = timeshift
                 this.net.lastLend = timeshift
             }

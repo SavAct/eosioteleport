@@ -35,8 +35,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
         if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
     }
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WaitWithAnimation = exports.stringToAsset = exports.assetToString = exports.assetdataToString = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
+exports.save_number_to_file = exports.load_number_from_file = exports.WaitWithAnimation = exports.stringToAsset = exports.assetToString = exports.assetdataToString = exports.hexToString = exports.sleep = exports.fromHexString = exports.toHexString = void 0;
+var fs_1 = __importDefault(require("fs"));
 /**
  * Convert an Uint8Array to an hex in string format
  * @param bytes Uint8Array
@@ -177,3 +181,37 @@ var WaitWithAnimation = function (s, info) {
     });
 };
 exports.WaitWithAnimation = WaitWithAnimation;
+/**
+ * Load a number from file if it exists
+ * @param file Path with name of the file
+ * @returns a saved id number otherwise throw an error
+ */
+var load_number_from_file = function (file) { return __awaiter(void 0, void 0, void 0, function () {
+    var file_contents, block_number;
+    return __generator(this, function (_a) {
+        //   let block_number: string | number = 'latest'
+        if (!fs_1.default.existsSync(file)) {
+            throw new Error('File does not exist');
+        }
+        file_contents = fs_1.default.readFileSync(file).toString();
+        if (!file_contents)
+            throw new Error('No content in file');
+        block_number = parseInt(file_contents);
+        if (isNaN(block_number))
+            throw new Error('No number in file');
+        return [2 /*return*/, block_number];
+    });
+}); };
+exports.load_number_from_file = load_number_from_file;
+/**
+ * Save a number to a file
+ * @param num Number which should be stored
+ * @param file Name of the file
+ */
+var save_number_to_file = function (num, file) { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        fs_1.default.writeFileSync(file, num.toString());
+        return [2 /*return*/];
+    });
+}); };
+exports.save_number_to_file = save_number_to_file;

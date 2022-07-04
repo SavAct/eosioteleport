@@ -53,7 +53,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 process.env.NTBA_FIX_319 = '1'; // Needed to disable TelegramBot warning
-var fs_1 = __importDefault(require("fs"));
 var ethers_1 = require("ethers");
 var yargs_1 = __importDefault(require("yargs"));
 var eosjs_jssig_1 = require("eosjs/dist/eosjs-jssig");
@@ -268,14 +267,6 @@ var EthOracle = /** @class */ (function () {
                         return [3 /*break*/, 1];
                     case 14: return [2 /*return*/];
                 }
-            });
-        });
-    };
-    EthOracle.save_block_to_file = function (block_num, blocks_file) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
-                fs_1.default.writeFileSync(blocks_file, block_num.toString());
-                return [2 /*return*/];
             });
         });
     };
@@ -586,27 +577,6 @@ var EthOracle = /** @class */ (function () {
         });
     };
     /**
-     * Loads a block number from a saved file if one exists or throws an error.
-     * @returns a saved block number from a file
-     */
-    EthOracle.load_block_number_from_file = function (blocks_file) {
-        return __awaiter(this, void 0, void 0, function () {
-            var file_contents, block_number;
-            return __generator(this, function (_a) {
-                //   let block_number: string | number = 'latest'
-                if (!fs_1.default.existsSync(blocks_file))
-                    throw new Error('block file does not exist.');
-                file_contents = fs_1.default.readFileSync(blocks_file).toString();
-                if (!file_contents)
-                    throw new Error('No blocks file');
-                block_number = parseInt(file_contents);
-                if (isNaN(block_number))
-                    throw new Error('No block number in file.');
-                return [2 /*return*/, block_number];
-            });
-        });
-    };
-    /**
      * Get latest block of eth blockchain
      * @returns latest block number
      */
@@ -699,7 +669,7 @@ var EthOracle = /** @class */ (function () {
                         return [3 /*break*/, 11];
                     case 8:
                         _a.trys.push([8, 10, , 11]);
-                        return [4 /*yield*/, EthOracle.load_block_number_from_file(this.blocks_file_name)];
+                        return [4 /*yield*/, (0, helpers_1.load_number_from_file)(this.blocks_file_name)];
                     case 9:
                         from_block = _a.sent();
                         from_block -= 50; // for fresh start go back 50 blocks
@@ -737,7 +707,7 @@ var EthOracle = /** @class */ (function () {
                     case 13:
                         _a.sent();
                         from_block = to_block; // In next round the current to block is the from block
-                        return [4 /*yield*/, EthOracle.save_block_to_file(to_block, this.blocks_file_name)]; // Save last block received
+                        return [4 /*yield*/, (0, helpers_1.save_number_to_file)(to_block, this.blocks_file_name)]; // Save last block received
                     case 14:
                         _a.sent(); // Save last block received
                         return [3 /*break*/, 17];
@@ -754,7 +724,7 @@ var EthOracle = /** @class */ (function () {
                         _a.sent();
                         return [3 /*break*/, 20];
                     case 19:
-                        console.log("Latest block is ".concat(latest_block, ". Not waiting..."));
+                        console.log("Will not wait because the latest block is ".concat(latest_block));
                         _a.label = 20;
                     case 20:
                         tries = 0;
