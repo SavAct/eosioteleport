@@ -144,7 +144,6 @@ export class EthApi {
     }
 
     getProvider() {
-        console.log('\nGet endpoint', this.endpoint); //-
         return this.providers[this.epId];
     }
 

@@ -674,17 +674,19 @@ var EthOracle = /** @class */ (function () {
                         this.running = true;
                         _a.label = 1;
                     case 1:
-                        _a.trys.push([1, 28, , 30]);
-                        return [4 /*yield*/, this.eth_api.nextEndpoint()];
+                        _a.trys.push([1, 27, , 29]);
+                        tries = 0;
+                        _a.label = 2;
                     case 2:
+                        if (!this.running) return [3 /*break*/, 26];
+                        // Select the initial endpoint on the first round otherwise the select the next endpoint to distribute the requests
+                        return [4 /*yield*/, this.eth_api.nextEndpoint()];
+                    case 3:
+                        // Select the initial endpoint on the first round otherwise the select the next endpoint to distribute the requests
                         _a.sent();
                         return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 3:
-                        _a.sent();
-                        tries = 0;
-                        _a.label = 4;
                     case 4:
-                        if (!this.running) return [3 /*break*/, 27];
+                        _a.sent();
                         _a.label = 5;
                     case 5:
                         _a.trys.push([5, 21, , 25]);
@@ -778,29 +780,23 @@ var EthOracle = /** @class */ (function () {
                         return [3 /*break*/, 24];
                     case 23: throw e_6.message;
                     case 24: return [3 /*break*/, 25];
-                    case 25: 
-                    // Select the next endpoint to distribute the requests
-                    return [4 /*yield*/, this.eos_api.nextEndpoint()];
-                    case 26:
-                        // Select the next endpoint to distribute the requests
-                        _a.sent();
-                        return [3 /*break*/, 4];
-                    case 27: return [3 /*break*/, 30];
-                    case 28:
+                    case 25: return [3 /*break*/, 2];
+                    case 26: return [3 /*break*/, 29];
+                    case 27:
                         e_7 = _a.sent();
                         return [4 /*yield*/, this.telegram.logError("\u26A1\uFE0F by ".concat(this.config.eos.oracleAccount, " on ").concat(this.config.eth.network, " \n").concat(String(e_7)))];
-                    case 29:
+                    case 28:
                         _a.sent();
-                        return [3 /*break*/, 30];
-                    case 30: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* and ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.oracleAccount), " \uD83D\uDC80"), true, true)];
-                    case 31:
+                        return [3 /*break*/, 29];
+                    case 29: return [4 /*yield*/, this.telegram.logViaBot("Thread closed of *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* and ").concat(TelegramMesseger_1.TgM.sToMd(this.config.eth.oracleAccount), " \uD83D\uDC80"), true, true)];
+                    case 30:
                         _a.sent();
-                        if (!this.telegram.isTelegram()) return [3 /*break*/, 33];
+                        if (!this.telegram.isTelegram()) return [3 /*break*/, 32];
                         return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
-                    case 32:
+                    case 31:
                         _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real
-                        _a.label = 33;
-                    case 33: return [2 /*return*/];
+                        _a.label = 32;
+                    case 32: return [2 /*return*/];
                 }
             });
         });

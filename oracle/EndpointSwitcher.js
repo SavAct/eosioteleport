@@ -213,7 +213,6 @@ var EthApi = /** @class */ (function () {
         return this.endpoint;
     };
     EthApi.prototype.getProvider = function () {
-        console.log('\nGet endpoint', this.endpoint); //-
         return this.providers[this.epId];
     };
     EthApi.prototype.checkInfo = function () {

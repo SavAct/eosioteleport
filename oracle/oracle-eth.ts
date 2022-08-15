@@ -639,10 +639,11 @@ class EthOracle {
         let from_block: number | undefined;
         this.running = true;
         try {
-            await this.eth_api.nextEndpoint();
-            await this.eos_api.nextEndpoint();
             let tries = 0;
             while (this.running) {
+                // Select the initial endpoint on the first round otherwise the select the next endpoint to distribute the requests
+                await this.eth_api.nextEndpoint();
+                await this.eos_api.nextEndpoint();
                 try {
                     // Get latest block from chain
                     const latest_block = await this.getLatestBlock();
@@ -715,9 +716,6 @@ class EthOracle {
                         throw e.message;
                     }
                 }
-
-                // Select the next endpoint to distribute the requests
-                await this.eos_api.nextEndpoint();
             }
         } catch (e) {
             await this.telegram.logError(
