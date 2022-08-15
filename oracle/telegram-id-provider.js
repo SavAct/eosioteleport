@@ -45,18 +45,20 @@ var node_telegram_bot_api_1 = __importDefault(require("node-telegram-bot-api"));
 var yargs_1 = __importDefault(require("yargs"));
 // Handle params from console
 var argv = yargs_1.default
-    .version().alias('version', 'v')
+    .version()
+    .alias('version', 'v')
     .option('token', {
     alias: 't',
     description: 'Secret telegram bot token',
-    type: 'string'
+    type: 'string',
 })
     .option('config', {
     alias: 'c',
     description: 'Path of config file',
-    type: 'string'
+    type: 'string',
 })
-    .help().alias('help', 'h').argv;
+    .help()
+    .alias('help', 'h').argv;
 // Load config and set title
 var config_path = argv.config || process.env['CONFIG'] || './config';
 process.title = "telegram-id-provider";
@@ -76,22 +78,26 @@ if (token) {
             switch (_a.label) {
                 case 0:
                     chatId = msg.chat.id;
-                    if (!((Date.now() / 1000) - msg.date <= 60)) return [3 /*break*/, 3];
+                    if (!(Date.now() / 1000 - msg.date <= 60)) return [3 /*break*/, 3];
                     bot_1.sendMessage(chatId, 'Your telegram id is: ' + String(chatId));
                     if (!msg.text) return [3 /*break*/, 3];
                     console.log(String(chatId) + ':', msg.text);
                     if (!(msg.text == 'close')) return [3 /*break*/, 3];
-                    return [4 /*yield*/, bot_1.deleteMessage(msg.chat.id, String(msg.message_id)).catch(function (er) { return; })];
+                    return [4 /*yield*/, bot_1.deleteMessage(msg.chat.id, String(msg.message_id)).catch(function (er) {
+                            return;
+                        })];
                 case 1:
                     _a.sent();
                     bot_1.removeAllListeners();
                     return [4 /*yield*/, bot_1.close()];
                 case 2:
                     _a.sent();
-                    setTimeout(function () { return __awaiter(void 0, void 0, void 0, function () { return __generator(this, function (_a) {
-                        process.exit(0);
-                        return [2 /*return*/];
-                    }); }); }, 5000);
+                    setTimeout(function () { return __awaiter(void 0, void 0, void 0, function () {
+                        return __generator(this, function (_a) {
+                            process.exit(0);
+                            return [2 /*return*/];
+                        });
+                    }); }, 5000);
                     console.log('Close in 5 seconds');
                     _a.label = 3;
                 case 3: return [2 /*return*/];

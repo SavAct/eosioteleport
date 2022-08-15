@@ -133,7 +133,7 @@ var stringToAsset = function (asset_str) {
     if (e == -1) {
         throw "Missing symbol of asset string: ".concat(asset_str);
     }
-    var precision = (e - s) - 1;
+    var precision = e - s - 1;
     var name = asset_str.substring(e + 1).trim();
     var amount = BigInt(asset_str.substring(0, s) + asset_str.substring(s + 1, e));
     return { amount: amount, symbol: { precision: precision, name: name } };
@@ -151,7 +151,7 @@ var WaitWithAnimation = function (s, info) {
             switch (_a.label) {
                 case 0:
                     if (!process.stdout.isTTY) return [3 /*break*/, 5];
-                    process.stdout.write(info + "\n\x1b[?25l");
+                    process.stdout.write(info + '\n\x1b[?25l');
                     i = 0;
                     _a.label = 1;
                 case 1:
@@ -160,7 +160,7 @@ var WaitWithAnimation = function (s, info) {
                     return [4 /*yield*/, (0, exports.sleep)(1000)];
                 case 2:
                     _a.sent();
-                    process.stdout.write("\r\x1b[K");
+                    process.stdout.write('\r\x1b[K');
                     _a.label = 3;
                 case 3:
                     i++;

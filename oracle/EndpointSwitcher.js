@@ -68,7 +68,7 @@ var EosApi = /** @class */ (function () {
         this.lastInfo = null;
         this.gotRightInfo = [];
         if (endpointList.length <= 0) {
-            throw ('No list of eosio entpoints defined');
+            throw 'No list of eosio entpoints defined';
         }
         this.gotRightInfo = Array(endpointList.length).fill(false);
         this.endpointList = endpointList.map(function (ep) {
@@ -113,7 +113,7 @@ var EosApi = /** @class */ (function () {
                     case 4:
                         i++;
                         return [3 /*break*/, 1];
-                    case 5: throw ('No usable endpoints.');
+                    case 5: throw 'No usable endpoints.';
                 }
             });
         });
@@ -155,9 +155,11 @@ var EosApi = /** @class */ (function () {
             return this.rpc;
         }
         else {
-            this.rpc = new eosjs_1.JsonRpc(this.getEndpoint(), { fetch: function (ep, options) {
+            this.rpc = new eosjs_1.JsonRpc(this.getEndpoint(), {
+                fetch: function (ep, options) {
                     return (0, cross_fetch_1.default)(ep, __assign(__assign({}, options), { timeout: _this.timeout }));
-                } });
+                },
+            });
             return this.rpc;
         }
     };
@@ -166,7 +168,12 @@ var EosApi = /** @class */ (function () {
             return this.api;
         }
         else {
-            this.api = new eosjs_1.Api({ rpc: this.getRPC(), signatureProvider: this.signatureProvider, textDecoder: new TextDecoder(), textEncoder: new TextEncoder() });
+            this.api = new eosjs_1.Api({
+                rpc: this.getRPC(),
+                signatureProvider: this.signatureProvider,
+                textDecoder: new TextDecoder(),
+                textEncoder: new TextEncoder(),
+            });
             return this.api;
         }
     };
@@ -191,7 +198,7 @@ var EthApi = /** @class */ (function () {
         this.gotRightInfo = [];
         this.netId = undefined;
         if (endpointList.length <= 0) {
-            throw ('No list of eth entpoints defined');
+            throw 'No list of eth entpoints defined';
         }
         if (netIdStr) {
             this.netId = Number(netIdStr);
@@ -206,6 +213,7 @@ var EthApi = /** @class */ (function () {
         return this.endpoint;
     };
     EthApi.prototype.getProvider = function () {
+        console.log('\nGet endpoint', this.endpoint); //-
         return this.providers[this.epId];
     };
     EthApi.prototype.checkInfo = function () {
@@ -216,16 +224,13 @@ var EthApi = /** @class */ (function () {
                     case 0:
                         _b.trys.push([0, 2, , 3]);
                         _a = this;
-                        return [4 /*yield*/, this.providers[this.epId].getNetwork()
-                            // console.log('netId', this.netId);
-                            // console.log('this.lastInfo.chainId', this.lastInfo.chainId);
-                        ];
+                        return [4 /*yield*/, this.providers[this.epId].getNetwork()];
                     case 1:
                         _a.lastInfo = _b.sent();
                         // console.log('netId', this.netId);
                         // console.log('this.lastInfo.chainId', this.lastInfo.chainId);
                         if (this.netId !== undefined && this.netId != this.lastInfo.chainId) {
-                            console.log('Delete endpoint because it uses another eosio chain', this.endpoint);
+                            console.log('Delete endpoint because it uses another eth chain', this.endpoint);
                             this.endpointList.splice(this.epId, 1);
                             this.gotRightInfo.splice(this.epId, 1);
                             this.providers.splice(this.epId, 1);
@@ -283,7 +288,7 @@ var EthApi = /** @class */ (function () {
                     case 4:
                         i++;
                         return [3 /*break*/, 1];
-                    case 5: throw ('No usable endpoints.');
+                    case 5: throw 'No usable endpoints.';
                 }
             });
         });

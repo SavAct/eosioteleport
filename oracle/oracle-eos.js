@@ -65,7 +65,10 @@ var EosOracle = /** @class */ (function () {
         this.telegram = new TelegramMesseger_1.TgM(config.telegram);
         this.eos_api = new EndpointSwitcher_1.EosApi(this.config.eos.netId, this.config.eos.endpoints, this.signatureProvider);
         this.rsManager = new ResourcenManager_1.ResourcesManager(this.config.powerup, this.config.eos, this.telegram, this.eos_api);
-        this.eosio_data = { tel_contract: config.eos.teleportContract, short_net_id: (0, helpers_1.fromHexString)(config.eos.netId.substring(0, 8)) };
+        this.eosio_data = {
+            tel_contract: config.eos.teleportContract,
+            short_net_id: (0, helpers_1.fromHexString)(config.eos.netId.substring(0, 8)),
+        };
     }
     /**
      * Send sign a teleport. Repeats itself until a defined amount of tries are reached
@@ -84,25 +87,27 @@ var EosOracle = /** @class */ (function () {
                         // Send transaction
                         console.log("Teleport id ".concat(id, ", try to send signature ").concat(tries, "."));
                         return [4 /*yield*/, this.eos_api.getAPI().transact({
-                                actions: [{
+                                actions: [
+                                    {
                                         account: this.config.eos.teleportContract,
                                         name: 'sign',
-                                        authorization: [{
+                                        authorization: [
+                                            {
                                                 actor: this.config.eos.oracleAccount,
                                                 permission: this.config.eos.oraclePermission || 'active',
-                                            }],
+                                            },
+                                        ],
                                         data: {
                                             oracle_name: this.config.eos.oracleAccount,
                                             id: id,
-                                            signature: signature
+                                            signature: signature,
                                         },
-                                    }]
+                                    },
+                                ],
                             }, {
                                 blocksBehind: 3,
                                 expireSeconds: 30,
-                            })
-                            // Lend CPU and NET resources if needed
-                        ];
+                            })];
                     case 1:
                         result = _b.sent();
                         // Lend CPU and NET resources if needed
@@ -215,7 +220,7 @@ var EosOracle = /** @class */ (function () {
                                 scope: this.config.eos.teleportContract,
                                 table: 'teleports',
                                 lower_bound: lower_bound,
-                                limit: limit
+                                limit: limit,
                             })];
                     case 3:
                         teleport_res = _a.sent();
@@ -252,8 +257,8 @@ var EosOracle = /** @class */ (function () {
     EosOracle.serializeLogData_v1 = function (teleport, logSize) {
         // Serialize the values
         var sb = new eosjs_1.Serialize.SerialBuffer({
-            textEncoder: new text_encoding_1.TextEncoder,
-            textDecoder: new text_encoding_1.TextDecoder
+            textEncoder: new text_encoding_1.TextEncoder(),
+            textDecoder: new text_encoding_1.TextDecoder(),
         });
         sb.pushNumberAsUint64(teleport.id);
         sb.pushUint32(teleport.time);
@@ -272,8 +277,8 @@ var EosOracle = /** @class */ (function () {
     EosOracle.serializeLogData_v2 = function (eosio_chain_data, teleport, logSize) {
         // Serialize the values
         var sb = new eosjs_1.Serialize.SerialBuffer({
-            textEncoder: new text_encoding_1.TextEncoder,
-            textDecoder: new text_encoding_1.TextDecoder
+            textEncoder: new text_encoding_1.TextEncoder(),
+            textDecoder: new text_encoding_1.TextDecoder(),
         });
         sb.pushNumberAsUint64(teleport.id);
         sb.pushUint32(teleport.time);
@@ -295,7 +300,7 @@ var EosOracle = /** @class */ (function () {
             var logDataKeccak, ethPriKey, sig;
             return __generator(this, function (_a) {
                 logDataKeccak = (0, ethereumjs_util_1.keccak)(Buffer.from(logData));
-                ethPriKey = Buffer.from(privateKey, "hex");
+                ethPriKey = Buffer.from(privateKey, 'hex');
                 sig = (0, ethereumjs_util_1.ecsign)(logDataKeccak, ethPriKey);
                 (0, ethereumjs_util_1.toRpcSig)(sig.v, sig.r, sig.s);
                 return [2 /*return*/, (0, ethereumjs_util_1.toRpcSig)(sig.v, sig.r, sig.s)];
@@ -315,7 +320,7 @@ var EosOracle = /** @class */ (function () {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, this.getTableRows(request.lowerId, request.amount, true)];
                     case 1:
-                        chain_data = _a.sent();
+                        chain_data = (_a.sent());
                         lowest_amount = chain_data.rows.length;
                         verify_data = [];
                         if (!(lowest_amount > 0)) return [3 /*break*/, 6];
@@ -329,12 +334,13 @@ var EosOracle = /** @class */ (function () {
                         _a.sent();
                         return [4 /*yield*/, this.getTableRows(request.lowerId, request.amount, false)];
                     case 4:
-                        vData = (_a.sent()).rows;
+                        vData = (_a.sent())
+                            .rows;
                         verify_data.push(vData);
                         if (initialEndpoint == this.eos_api.getEndpoint()) {
-                            throw ('No available endpoints for verification. ⛔');
+                            throw 'No available endpoints for verification. ⛔';
                         }
-                        // Handle only to the lowest amount of entries  
+                        // Handle only to the lowest amount of entries
                         if (lowest_amount > vData.length) {
                             lowest_amount = vData.length;
                         }
@@ -378,12 +384,12 @@ var EosOracle = /** @class */ (function () {
                         irr_block = _a.sent();
                         irr_time = new Date(irr_block.timestamp + 'Z').getTime();
                         return [3 /*break*/, 6];
-                    case 5: throw ('No time parameter given by ' + this.eos_api.getEndpoint());
+                    case 5: throw 'No time parameter given by ' + this.eos_api.getEndpoint();
                     case 6:
                         if (typeof irr_time == 'number') {
                             t = Math.floor(irr_time / 1000);
                             if (t < minIrrTime) {
-                                throw ("Irreversible time is lower than possible, occurred by using ".concat(this.eos_api.getEndpoint()));
+                                throw "Irreversible time is lower than possible, occurred by using ".concat(this.eos_api.getEndpoint());
                             }
                             else if (lowestIrr === undefined || t < lowestIrr) {
                                 // New lowest possible irreversible time
@@ -391,7 +397,7 @@ var EosOracle = /** @class */ (function () {
                             }
                         }
                         else {
-                            throw ("Time parameter is not a number, occurred by using ".concat(this.eos_api.getEndpoint()));
+                            throw "Time parameter is not a number, occurred by using ".concat(this.eos_api.getEndpoint());
                         }
                         verifications++;
                         return [3 /*break*/, 9];
@@ -404,7 +410,7 @@ var EosOracle = /** @class */ (function () {
                         // Get next endpoint and check if all endpoints are already checked
                         _a.sent();
                         if (epStart == this.eos_api.getEndpoint()) {
-                            throw ('Could not get last irreversible block time from any endpoint. ⛔');
+                            throw 'Could not get last irreversible block time from any endpoint. ⛔';
                         }
                         return [3 /*break*/, 9];
                     case 9:
@@ -496,9 +502,7 @@ var EosOracle = /** @class */ (function () {
                         if (!!isVerifyed) return [3 /*break*/, 5];
                         this.telegram.logError("Teleport id ".concat(TelegramMesseger_1.TgM.sToMd(item.id.toString()), ", skip this one by *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* on *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* \u274C"), true, true);
                         return [3 /*break*/, 8];
-                    case 5: return [4 /*yield*/, EosOracle.signTeleport(logData, this.config.eth.privateKey)
-                        // Send signature to eosio chain
-                    ];
+                    case 5: return [4 /*yield*/, EosOracle.signTeleport(logData, this.config.eth.privateKey)];
                     case 6:
                         signature = _b.sent();
                         // Send signature to eosio chain
@@ -575,9 +579,7 @@ var EosOracle = /** @class */ (function () {
                         e_4 = _a.sent();
                         id = 0;
                         return [3 /*break*/, 4];
-                    case 4: return [4 /*yield*/, this.telegram.logViaBot("Starting *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* beginning by *id ").concat(TelegramMesseger_1.TgM.sToMd(id.toString()), "* \uD83C\uDFC3"), true, true)
-                        // Create an object to change the current id on each run
-                    ];
+                    case 4: return [4 /*yield*/, this.telegram.logViaBot("Starting *".concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.network), "* oracle with *").concat(TelegramMesseger_1.TgM.sToMd(this.config.eos.oracleAccount), "* beginning by *id ").concat(TelegramMesseger_1.TgM.sToMd(id.toString()), "* \uD83C\uDFC3"), true, true)];
                     case 5:
                         _a.sent();
                         // Create an object to change the current id on each run
@@ -616,7 +618,7 @@ var EosOracle = /** @class */ (function () {
                     case 17:
                         _a.sent();
                         if (!this.telegram.isTelegram()) return [3 /*break*/, 19];
-                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)]; // Wait some seconds to finsih the sending of telegram messages for real
+                        return [4 /*yield*/, (0, helpers_1.sleep)(5000)];
                     case 18:
                         _a.sent(); // Wait some seconds to finsih the sending of telegram messages for real
                         _a.label = 19;
@@ -630,37 +632,39 @@ var EosOracle = /** @class */ (function () {
 }());
 // Handle params from console
 var argv = yargs_1.default
-    .version().alias('version', 'v')
+    .version()
+    .alias('version', 'v')
     .option('id', {
     alias: 'n',
     description: 'Teleport id to start from',
-    type: 'number'
+    type: 'number',
 })
     .option('amount', {
     alias: 'a',
     description: 'Amount of handled teleports per requests',
-    type: 'number'
+    type: 'number',
 })
     .option('signs', {
     alias: 's',
     description: 'Amount of signatures until this oracle will sign too',
-    type: 'number'
+    type: 'number',
 })
     .option('waiter', {
     alias: 'w',
     description: 'Seconds to wait after finishing all current teleports',
-    type: 'number'
+    type: 'number',
 })
     .option('force', {
     description: 'Force signing, even when it is already completed or signed by other oracles',
-    type: 'boolean'
+    type: 'boolean',
 })
     .option('config', {
     alias: 'c',
     description: 'Path of config file',
-    type: 'string'
+    type: 'string',
 })
-    .help().alias('help', 'h').argv;
+    .help()
+    .alias('help', 'h').argv;
 // Load config and set title
 var config_path = argv.config || process.env['CONFIG'] || './config';
 process.title = "oracle-eos ".concat(config_path);

@@ -59,7 +59,9 @@ var TgM = /** @class */ (function () {
             if (config_telegram.costsIds) {
                 this.telegram.costsIds = config_telegram.costsIds;
             }
-            this.telegram.bot = new node_telegram_bot_api_1.default(config_telegram.privateToken, { polling: false });
+            this.telegram.bot = new node_telegram_bot_api_1.default(config_telegram.privateToken, {
+                polling: false,
+            });
         }
     }
     TgM.prototype.isTelegram = function () {
@@ -83,7 +85,9 @@ var TgM = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), {
+                                parse_mode: markdown ? 'MarkdownV2' : undefined,
+                            })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -114,7 +118,9 @@ var TgM = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), {
+                                parse_mode: markdown ? 'MarkdownV2' : undefined,
+                            })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -145,7 +151,9 @@ var TgM = /** @class */ (function () {
                     case 1:
                         if (!(_i < _a.length)) return [3 /*break*/, 4];
                         id = _a[_i];
-                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), { parse_mode: markdown ? 'MarkdownV2' : undefined })];
+                        return [4 /*yield*/, this.telegram.bot.sendMessage(id, no_convert === true ? msg : TgM.sToMd(msg), {
+                                parse_mode: markdown ? 'MarkdownV2' : undefined,
+                            })];
                     case 2:
                         _b.sent();
                         _b.label = 3;
@@ -183,7 +191,9 @@ var TgM = /** @class */ (function () {
      * @returns Markdown string
      */
     TgM.sToMd = function (str) {
-        return TgM.rpMarkDown.reduce(function (str, replacement) { return str.replace(replacement.reg, replacement.repl); }, str);
+        return TgM.rpMarkDown.reduce(function (str, replacement) {
+            return str.replace(replacement.reg, replacement.repl);
+        }, str);
     };
     return TgM;
 }());
