@@ -1,36 +1,36 @@
 {
-  "name": "alienteleport-oracle",
-  "version": "1.1.0",
-  "description": "",
-  "scripts": {
-    "eth": "tsc && node oracle-eth.js",
-    "eos": "tsc && node oracle-eos.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "id-provider": "tsc && node telegram-id-provider.js"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@eosdacio/eosio-statereceiver": "^1.0.2",
-    "abi-decoder": "^2.4.0",
-    "child-process": "^1.0.2",
-    "cross-fetch": "^3.1.5",
-    "dotenv": "^16.0.1",
-    "eosjs": "^22.0.0",
-    "ethereumjs-util": "^7.0.4",
-    "ethers": "^5.6.2",
-    "node-fetch": "^3.2.3",
-    "node-telegram-bot-api": "^0.58.0",
-    "text-encoding": "^0.7.0",
-    "web3": "^1.7.3",
-    "yargs": "^17.4.1"
-  },
-  "devDependencies": {
-    "@types/elliptic": "^6.4.14",
-    "@types/ethereumjs-util": "^6.1.0",
-    "@types/node-telegram-bot-api": "^0.57.1",
-    "@types/text-encoding": "0.0.36",
-    "@types/yargs": "^17.0.10",
-    "typescript": "^4.7.2"
-  }
+    "name": "alienteleport-oracle",
+    "version": "1.1.0",
+    "description": "",
+    "scripts": {
+        "eth": "tsc && node oracle-eth.js",
+        "eos": "tsc && node oracle-eos.js",
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "id-provider": "tsc && node telegram-id-provider.js"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@eosdacio/eosio-statereceiver": "^1.0.2",
+        "abi-decoder": "^2.4.0",
+        "child-process": "^1.0.2",
+        "cross-fetch": "^3.1.5",
+        "dotenv": "^16.0.1",
+        "eosjs": "^22.0.0",
+        "ethereumjs-util": "^7.0.4",
+        "ethers": "^5.7.2",
+        "node-fetch": "^3.2.3",
+        "node-telegram-bot-api": "^0.61.0",
+        "text-encoding": "^0.7.0",
+        "web3": "^1.7.3",
+        "yargs": "^17.4.1"
+    },
+    "devDependencies": {
+        "@types/elliptic": "^6.4.14",
+        "@types/ethereumjs-util": "^6.1.0",
+        "@types/node-telegram-bot-api": "^0.61.6",
+        "@types/text-encoding": "0.0.36",
+        "@types/yargs": "^17.0.10",
+        "typescript": "^5.0.4"
+    }
 }

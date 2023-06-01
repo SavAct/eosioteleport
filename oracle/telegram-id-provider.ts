@@ -48,7 +48,7 @@ if (token) {
             if (msg.text) {
                 console.log(String(chatId) + ':', msg.text);
                 if (msg.text == 'close') {
-                    await bot.deleteMessage(msg.chat.id, String(msg.message_id)).catch((er) => {
+                    await bot.deleteMessage(msg.chat.id, msg.message_id).catch((er) => {
                         return;
                     });
                     bot.removeAllListeners();
