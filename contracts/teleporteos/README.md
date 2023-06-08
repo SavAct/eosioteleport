@@ -142,3 +142,11 @@ Docker must be running. Start the tests with the following command in the debian
 ```
 sudo yarn test
 ```
+
+# Development
+
+To use VS Code IntelliSense,
+
+1. Download eosio.cdt.
+2. Create a file called `c_cpp_properties.json` in the `.vscode` folder of your project.
+3. Include the path of the EOSIO libraries like `"C:/eosio/eosio.cdt/libraries/**"` to the `c_cpp_properties.json` file.
