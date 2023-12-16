@@ -12,19 +12,19 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/chai-as-promised": "^7.1.2",
+    "@types/chai-datetime": "^0.0.39",
     "@types/chai": "^4.3.5",
     "@types/mocha": "^10.0.1",
     "chai": "^4.3.7"
   },
   "dependencies": {
-    "@types/chai-as-promised": "^7.1.2",
-    "@types/chai-datetime": "^0.0.37",
     "call-bind": "^1.0.2",
     "chai-as-promised": "^7.1.1",
     "chai-datetime": "^1.8.0",
     "eosjs": "^20.0.3",
     "lamington": "https://github.com/Alien-Worlds/lamington.git",
     "node-fetch": "^3.3.1",
-    "typescript": "^4.9.3"
+    "typescript": "^5.3.3"
   }
 }

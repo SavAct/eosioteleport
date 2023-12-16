@@ -13,6 +13,7 @@ import {
   assertEOSError,
   UpdateAuth,
   assertRowsContain,
+  Asset,
 } from 'lamington';
 import * as chai from 'chai';
 
@@ -52,9 +53,9 @@ describe('teleporteos', async () => {
       it('should fail with auth error i1', async () => {
         await assertMissingAuthority(
           teleporteos.ini(
-            `100.0000 ${token_symbol}`,
-            `0.0000 ${token_symbol}`,
-            '0',
+            new Asset(`100.0000 ${token_symbol}`),
+            new Asset(`0.0000 ${token_symbol}`),
+            0,
             false,
             3,
             0,
@@ -66,9 +67,9 @@ describe('teleporteos', async () => {
     context('with correct auth', async () => {
       it('should succeed i2', async () => {
         await teleporteos.ini(
-          `100.0000 ${token_symbol}`,
-          `0.0000 ${token_symbol}`,
-          '0',
+          new Asset(`100.0000 ${token_symbol}`),
+          new Asset(`0.0000 ${token_symbol}`),
+          0,
           false,
           3,
           0,
@@ -79,9 +80,9 @@ describe('teleporteos', async () => {
       it('execute again should fail i3', async () => {
         await assertEOSErrorIncludesMessage(
           teleporteos.ini(
-            `50.0000 ${token_symbol}`,
-            `0.0000 ${token_symbol}`,
-            '0',
+            new Asset(`50.0000 ${token_symbol}`),
+            new Asset(`0.0000 ${token_symbol}`),
+            0,
             false,
             3,
             0,
@@ -355,7 +356,7 @@ describe('teleporteos', async () => {
             sender1.name,
             sender1.name,
             '1111111111111111111111111111111111111111111111111111111111111111',
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             1,
             true,
@@ -375,7 +376,7 @@ describe('teleporteos', async () => {
               oracle3.name,
               sender1.name,
               '1111111111111111111111111111111111111111111111111111111111111111',
-              `123.0000 ${token_symbol}`,
+              new Asset(`123.0000 ${token_symbol}`),
               2,
               1,
               true,
@@ -390,7 +391,7 @@ describe('teleporteos', async () => {
             oracle3.name,
             sender1.name,
             '1111111111111111111111111111111111111111111111111111111111111111',
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             1,
             true,
@@ -408,7 +409,7 @@ describe('teleporteos', async () => {
             date: date0,
             id: 0,
             index: 1,
-            quantity: `123.0000 ${token_symbol}`,
+            quantity: new Asset(`123.0000 ${token_symbol}`),
             ref: '1111111111111111111111111111111111111111111111111111111111111111',
             to: sender1.name,
           });
@@ -421,7 +422,7 @@ describe('teleporteos', async () => {
           oracle1.name,
           sender1.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `123.0000 ${token_symbol}`,
+          new Asset(`123.0000 ${token_symbol}`),
           2,
           1,
           true,
@@ -436,7 +437,7 @@ describe('teleporteos', async () => {
           oracle3.name,
           sender1.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `0.1230 ${token_symbol}`,
+          new Asset(`0.1230 ${token_symbol}`),
           1,
           1,
           true,
@@ -451,7 +452,7 @@ describe('teleporteos', async () => {
           oracle3.name,
           sender2.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `123.0000 ${token_symbol}`,
+          new Asset(`123.0000 ${token_symbol}`),
           2,
           1,
           true,
@@ -467,7 +468,7 @@ describe('teleporteos', async () => {
             oracle3.name,
             sender1.name,
             '1111111111111111111111111111111111111111111111111111111111111111',
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             1,
             true,
@@ -483,7 +484,7 @@ describe('teleporteos', async () => {
           oracle1.name,
           sender1.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `123.0000 ${token_symbol}`,
+          new Asset(`123.0000 ${token_symbol}`),
           2,
           0,
           true,
@@ -498,7 +499,7 @@ describe('teleporteos', async () => {
           oracle3.name,
           sender1.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `123.0000 ${token_symbol}`,
+          new Asset(`123.0000 ${token_symbol}`),
           2,
           0,
           true,
@@ -514,7 +515,7 @@ describe('teleporteos', async () => {
             oracle2.name,
             sender1.name,
             '1111111111111111111111111111111111111111111111111111111111111111',
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             1,
             true,
@@ -530,7 +531,7 @@ describe('teleporteos', async () => {
           oracle2.name,
           sender1.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `123.0000 ${token_symbol}`,
+          new Asset(`123.0000 ${token_symbol}`),
           2,
           0,
           true,
@@ -541,14 +542,16 @@ describe('teleporteos', async () => {
         date3 = new Date(r?.processed?.block_time + 'Z');
       });
       it('should transfer tokens rt13', async () => {
-        await assertRowsEqual(
-          alienworldsToken.accountsTable({ scope: sender1.name }),
-          [
-            {
-              balance: `1000123.0000 ${token_symbol}`,
-            },
-          ]
-        );
+        const { rows } = await alienworldsToken.accountsTable({
+          scope: sender1.name,
+        });
+        chai.expect(rows.length).equal(1, 'Wrong amount of rows');
+        chai
+          .expect(rows[0].balance.toString())
+          .equal(
+            new Asset(`1000123.0000 ${token_symbol}`).toString(),
+            'Wrong balance'
+          );
       });
       it('should fail to confirm a teleport twice rt14', async () => {
         await assertEOSErrorIncludesMessage(
@@ -556,7 +559,7 @@ describe('teleporteos', async () => {
             oracle2.name,
             sender1.name,
             '1111111111111111111111111111111111111111111111111111111111111111',
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             0,
             true,
@@ -573,7 +576,7 @@ describe('teleporteos', async () => {
             oracle2.name,
             sender1.name,
             '1111111111111111111111111111111111111111111111111111111111111111',
-            `1.0000 ${token_symbol}`,
+            new Asset(`1.0000 ${token_symbol}`),
             2,
             0,
             true,
@@ -597,7 +600,7 @@ describe('teleporteos', async () => {
           chain_id: 2,
           index: 1,
           confirmations: 2,
-          quantity: `123.0000 ${token_symbol}`,
+          quantity: new Asset(`123.0000 ${token_symbol}`),
           ref: '1111111111111111111111111111111111111111111111111111111111111111',
           to: sender1.name,
           completed: false,
@@ -609,7 +612,7 @@ describe('teleporteos', async () => {
           chain_id: 1,
           index: 1,
           confirmations: 1,
-          quantity: `0.1230 ${token_symbol}`,
+          quantity: new Asset(`0.1230 ${token_symbol}`),
           ref: '1111111111111111111111111111111111111111111111111111111111111111',
           to: sender1.name,
           completed: false,
@@ -621,7 +624,7 @@ describe('teleporteos', async () => {
           chain_id: 2,
           index: 1,
           confirmations: 1,
-          quantity: `123.0000 ${token_symbol}`,
+          quantity: new Asset(`123.0000 ${token_symbol}`),
           ref: '1111111111111111111111111111111111111111111111111111111111111111',
           to: sender2.name,
           completed: false,
@@ -633,7 +636,7 @@ describe('teleporteos', async () => {
           chain_id: 2,
           index: 0,
           confirmations: 3,
-          quantity: `123.0000 ${token_symbol}`,
+          quantity: new Asset(`123.0000 ${token_symbol}`),
           ref: '1111111111111111111111111111111111111111111111111111111111111111',
           to: sender1.name,
           completed: true,
@@ -649,7 +652,7 @@ describe('teleporteos', async () => {
         await assertMissingAuthority(
           teleporteos.teleport(
             sender1.name,
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             ethToken,
             {
@@ -660,12 +663,12 @@ describe('teleporteos', async () => {
       });
     });
     context('with valid auth', async () => {
-      context('with invalid quantity', async () => {
+      context('but invalid quantity', async () => {
         it('should fail with valid error t2', async () => {
           try {
             const r = await teleporteos.teleport(
               sender1.name,
-              '123.0000',
+              new Asset(`123.0000`),
               2,
               ethToken,
               {
@@ -679,7 +682,7 @@ describe('teleporteos', async () => {
                 (e as any).toString() ==
                   'Error: Expected symbol to be A-Z and between one and seven characters'
               )
-              .equal(true, 'Wrong error message');
+              .equal(true, 'Wrong error message: ' + (e as any).toString());
           }
         });
       });
@@ -688,7 +691,7 @@ describe('teleporteos', async () => {
           await assertEOSErrorIncludesMessage(
             teleporteos.teleport(
               sender1.name,
-              `23.0000 ${token_symbol}`,
+              new Asset(`23.0000 ${token_symbol}`),
               2,
               ethToken,
               {
@@ -704,7 +707,7 @@ describe('teleporteos', async () => {
           await assertEOSErrorIncludesMessage(
             teleporteos.teleport(
               sender1.name,
-              `123.0000 ${token_symbol}`,
+              new Asset(`123.0000 ${token_symbol}`),
               2,
               ethToken,
               {
@@ -720,7 +723,7 @@ describe('teleporteos', async () => {
           await alienworldsToken.transfer(
             sender1.name,
             teleporteos.account.name,
-            `120.0000 ${token_symbol}`,
+            new Asset(`120.0000 ${token_symbol}`),
             'teleport test',
             { from: sender1 }
           );
@@ -729,7 +732,7 @@ describe('teleporteos', async () => {
           await assertEOSErrorIncludesMessage(
             teleporteos.teleport(
               sender1.name,
-              `123.0000 ${token_symbol}`,
+              new Asset(`123.0000 ${token_symbol}`),
               2,
               ethToken,
               {
@@ -745,7 +748,7 @@ describe('teleporteos', async () => {
           await alienworldsToken.transfer(
             sender1.name,
             teleporteos.account.name,
-            `104.0000 ${token_symbol}`,
+            new Asset(`104.0000 ${token_symbol}`),
             'teleport test extra amount',
             { from: sender1 }
           );
@@ -753,7 +756,7 @@ describe('teleporteos', async () => {
         it('should succeed t6', async () => {
           await teleporteos.teleport(
             sender1.name,
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             2,
             ethToken,
             { from: sender1 }
@@ -855,7 +858,7 @@ describe('teleporteos', async () => {
             oracle1.name,
             0,
             ethToken,
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             { from: sender1 }
           )
         );
@@ -869,7 +872,7 @@ describe('teleporteos', async () => {
               oracle1.name,
               10,
               ethToken,
-              `123.0000 ${token_symbol}`,
+              new Asset(`123.0000 ${token_symbol}`),
               { from: oracle1 }
             ),
             'Teleport not found'
@@ -879,7 +882,7 @@ describe('teleporteos', async () => {
               oracle1.name,
               0,
               ethToken,
-              `1.0000 ${token_symbol}`,
+              new Asset(`1.0000 ${token_symbol}`),
               { from: oracle1 }
             ),
             'Quantity mismatch'
@@ -892,7 +895,7 @@ describe('teleporteos', async () => {
             oracle1.name,
             0,
             ethToken,
-            `123.0000 ${token_symbol}`,
+            new Asset(`123.0000 ${token_symbol}`),
             { from: oracle1 }
           );
           const {
@@ -907,7 +910,7 @@ describe('teleporteos', async () => {
               oracle1.name,
               0,
               ethToken,
-              `123.0000 ${token_symbol}`,
+              new Asset(`123.0000 ${token_symbol}`),
               { from: oracle1 }
             ),
             'Already marked as claimed'
@@ -922,7 +925,9 @@ describe('teleporteos', async () => {
     context('with incorrect auth', async () => {
       it('should fail with auth error m1', async () => {
         await assertMissingAuthority(
-          teleporteos.setmin(`200.0000 ${token_symbol}`, { from: sender1 })
+          teleporteos.setmin(new Asset(`200.0000 ${token_symbol}`), {
+            from: sender1,
+          })
         );
       });
     });
@@ -930,7 +935,11 @@ describe('teleporteos', async () => {
       it('wrong symbol name should fail m2', async () => {
         await assertEOSErrorIncludesMessage(
           teleporteos.setmin(
-            `200.0000 ${token_symbol.length <= 3 ? token_symbol + 'A' : 'AAA'}`,
+            new Asset(
+              `200.0000 ${
+                token_symbol.length <= 3 ? token_symbol + 'A' : 'AAA'
+              }`
+            ),
             { from: teleporteos.account }
           ),
           'Wrong token'
@@ -938,14 +947,14 @@ describe('teleporteos', async () => {
       });
       it('wrong symbol precision should fail m3', async () => {
         await assertEOSErrorIncludesMessage(
-          teleporteos.setmin(`200 ${token_symbol}`, {
+          teleporteos.setmin(new Asset(`200.0 ${token_symbol}`), {
             from: teleporteos.account,
           }),
           'Wrong token'
         );
       });
       it('should succeed m4', async () => {
-        await teleporteos.setmin(`200.0000 ${token_symbol}`, {
+        await teleporteos.setmin(new Asset(`200.0000 ${token_symbol}`), {
           from: teleporteos.account,
         });
       });
@@ -965,8 +974,8 @@ describe('teleporteos', async () => {
       it('should fail with auth error f1', async () => {
         await assertMissingAuthority(
           teleporteos.setfee(
-            assetdataToString(fixfee, token_symbol, 4),
-            '0.007',
+            new Asset(assetdataToString(fixfee, token_symbol, 4)),
+            0.007,
             { from: sender1 }
           )
         );
@@ -976,7 +985,7 @@ describe('teleporteos', async () => {
       context('with wrong variable fee', async () => {
         it('should fail f2', async () => {
           await assertEOSErrorIncludesMessage(
-            teleporteos.setfee(`0.0100 ${token_symbol}`, '-0.01', {
+            teleporteos.setfee(new Asset(`0.0100 ${token_symbol}`), -0.01, {
               from: teleporteos.account,
             }),
             'Variable fee has to be between 0 and 0.20'
@@ -984,7 +993,7 @@ describe('teleporteos', async () => {
         });
         it('should fail f3', async () => {
           await assertEOSErrorIncludesMessage(
-            teleporteos.setfee(`0.0100 ${token_symbol}`, '1', {
+            teleporteos.setfee(new Asset(`0.0100 ${token_symbol}`), 1, {
               from: teleporteos.account,
             }),
             'Variable fee has to be between 0 and 0.20'
@@ -995,8 +1004,12 @@ describe('teleporteos', async () => {
         it('wrong symbol name should fail f4', async () => {
           await assertEOSErrorIncludesMessage(
             teleporteos.setfee(
-              `0.0001 ${token_symbol.length <= 3 ? token_symbol + 'A' : 'AAA'}`,
-              '0',
+              new Asset(
+                `0.0001 ${
+                  token_symbol.length <= 3 ? token_symbol + 'A' : 'AAA'
+                }`
+              ),
+              0,
               { from: teleporteos.account }
             ),
             'Wrong token'
@@ -1004,7 +1017,7 @@ describe('teleporteos', async () => {
         });
         it('wrong symbol precision should fail f5', async () => {
           await assertEOSErrorIncludesMessage(
-            teleporteos.setfee(`1 ${token_symbol}`, '0.007', {
+            teleporteos.setfee(new Asset(`1.0 ${token_symbol}`), 0.007, {
               from: teleporteos.account,
             }),
             'Wrong token'
@@ -1012,7 +1025,7 @@ describe('teleporteos', async () => {
         });
         it('too high amount should fail f6', async () => {
           await assertEOSErrorIncludesMessage(
-            teleporteos.setfee(`200.0000 ${token_symbol}`, '0.007', {
+            teleporteos.setfee(new Asset(`200.0000 ${token_symbol}`), 0.007, {
               from: teleporteos.account,
             }),
             'Fees are too high relative to the minimum amount of token transfers'
@@ -1022,8 +1035,8 @@ describe('teleporteos', async () => {
       context('with valid fees', async () => {
         it('should succeed f7', async () => {
           await teleporteos.setfee(
-            assetdataToString(fixfee, token_symbol, 4),
-            '0.007',
+            new Asset(assetdataToString(fixfee, token_symbol, 4)),
+            0.007,
             { from: teleporteos.account }
           );
         });
@@ -1037,9 +1050,13 @@ describe('teleporteos', async () => {
             .equal('0.00700000000000000', 'Wrong variable fee');
         });
         it('should succeed withdraw and deposit f9', async () => {
-          await teleporteos.withdraw(sender1.name, `1.0000 ${token_symbol}`, {
-            from: sender1,
-          });
+          await teleporteos.withdraw(
+            sender1.name,
+            new Asset(`1.0000 ${token_symbol}`),
+            {
+              from: sender1,
+            }
+          );
           {
             let { rows } = await teleporteos.depositsTable();
             for (let item of rows) {
@@ -1066,7 +1083,7 @@ describe('teleporteos', async () => {
           await alienworldsToken.transfer(
             sender1.name,
             teleporteos.account.name,
-            `200.0000 ${token_symbol}`,
+            new Asset(`200.0000 ${token_symbol}`),
             'teleport test',
             { from: sender1 }
           );
@@ -1083,7 +1100,7 @@ describe('teleporteos', async () => {
         it('should succeed teleport f10', async () => {
           await teleporteos.teleport(
             sender1.name,
-            `200.0000 ${token_symbol}`,
+            new Asset(`200.0000 ${token_symbol}`),
             2,
             ethToken,
             { from: sender1 }
@@ -1124,19 +1141,25 @@ describe('teleporteos', async () => {
           const hash =
             '1111111111111111111111111111111111111111111111111111111111111113';
           const sendAmount = BigInt(1230);
-          const sendAsset = assetdataToString(sendAmount, token_symbol, 4);
+          const sendAsset = new Asset(
+            assetdataToString(sendAmount, token_symbol, 4)
+          );
           before(async () => {
             // Get current balance of sender 1 on token contract
             let {
               rows: [a_item_old],
             } = await alienworldsToken.accountsTable({ scope: sender1.name });
-            sender1Balance = stringToAsset(a_item_old.balance).amount;
+            sender1Balance = stringToAsset(
+              a_item_old.balance.toString()
+            ).amount;
             // Get current balance of sender 1 on deposits
             sender1DepositBalance = BigInt(0);
             let deposits_old = await teleporteos.depositsTable();
             for (let item of deposits_old.rows) {
               if (item.account == sender1.name) {
-                sender1DepositBalance = stringToAsset(item.quantity).amount;
+                sender1DepositBalance = BigInt(
+                  stringToAsset(String(item.quantity)).amount
+                );
                 break;
               }
             }
@@ -1204,18 +1227,24 @@ describe('teleporteos', async () => {
             let {
               rows: [a_item_new],
             } = await alienworldsToken.accountsTable({ scope: sender1.name });
+
             chai
-              .expect(stringToAsset(a_item_new.balance).amount.toString())
+              .expect(
+                stringToAsset(a_item_new.balance.toString()).amount.toString()
+              )
               .equal(
                 (sender1Balance + sendAmount - fee).toString(),
                 'New Balance reduced by a fee is wrong'
               );
+
             // Check if deposit table is unchanged
             let deposits_new = await teleporteos.depositsTable();
             for (let item of deposits_new.rows) {
               if (item.account == sender1.name) {
                 chai
-                  .expect(stringToAsset(item.quantity).amount.toString())
+                  .expect(
+                    stringToAsset(item.quantity.toString()).amount.toString()
+                  )
                   .equal(
                     sender1DepositBalance.toString(),
                     'Deposit has changed'
@@ -1248,7 +1277,9 @@ describe('teleporteos', async () => {
       const hash =
         '1111111111111111111111111111111111111111111111111111111111111114';
       const sendAmount = BigInt(10000);
-      const sendAsset = assetdataToString(sendAmount, token_symbol, 4);
+      const sendAsset = new Asset(
+        assetdataToString(sendAmount, token_symbol, 4)
+      );
       it('should succeed th3', async () => {
         // Set threshold to 2
         await teleporteos.setthreshold(2, { from: teleporteos.account });
@@ -1345,30 +1376,28 @@ describe('teleporteos', async () => {
       // Add three teleports
       await teleporteos.teleport(
         alienworldsToken.account.name,
-        `203.0000 ${token_symbol}`,
+        new Asset(`203.0000 ${token_symbol}`),
         1,
         ethToken,
         { from: alienworldsToken.account }
       );
       await teleporteos.teleport(
         alienworldsToken.account.name,
-        `203.0000 ${token_symbol}`,
+        new Asset(`203.0000 ${token_symbol}`),
         2,
         ethToken,
         { from: alienworldsToken.account }
       );
       await teleporteos.teleport(
         alienworldsToken.account.name,
-        `203.0000 ${token_symbol}`,
+        new Asset(`203.0000 ${token_symbol}`),
         3,
         ethToken,
         { from: alienworldsToken.account }
       );
       const fee = calcFee(BigInt(2030000), BigInt(fixfee), 0.007);
-      const sendAsset = assetdataToString(
-        BigInt(2030000) - fee,
-        token_symbol,
-        4
+      const sendAsset = new Asset(
+        assetdataToString(BigInt(2030000) - fee, token_symbol, 4)
       );
       // Claim all teleports but not the second in table
       await teleporteos.claimed(oracle1.name, 2, ethToken, sendAsset, {
@@ -1459,19 +1488,20 @@ describe('teleporteos', async () => {
       const {
         rows: [stat],
       } = await teleporteos.statsTable();
+
       chai.expect(BigInt(stat.collected)).equal(rest, 'Wrong collected rest');
       // Check oracle deposit amounts
       const deposits = await teleporteos.depositsTable({
         lowerBound: oracle1.name,
       });
       chai
-        .expect(stringToAsset(deposits.rows[0].quantity).amount)
+        .expect(stringToAsset(deposits.rows[0].quantity.toString()).amount)
         .equal(amountPerOracle, 'Wrong amount for oracle');
       chai
-        .expect(stringToAsset(deposits.rows[1].quantity).amount)
+        .expect(stringToAsset(deposits.rows[1].quantity.toString()).amount)
         .equal(amountPerOracle, 'Wrong amount for oracle');
       chai
-        .expect(stringToAsset(deposits.rows[2].quantity).amount)
+        .expect(stringToAsset(deposits.rows[2].quantity.toString()).amount)
         .equal(amountPerOracle, 'Wrong amount for oracle');
     });
   });
@@ -1515,7 +1545,7 @@ describe('teleporteos', async () => {
           oracle3.name,
           sender1.name,
           '1111111111111111111111111111111111111111111111111111111111111111',
-          `123.0000 ${token_symbol}`,
+          new Asset(`123.0000 ${token_symbol}`),
           2,
           1,
           true,
@@ -1529,7 +1559,7 @@ describe('teleporteos', async () => {
         oracle3.name,
         sender1.name,
         '1111111111111111111111111111111111111111111111111111111111111111',
-        `123.0000 ${token_symbol}`,
+        new Asset(`123.0000 ${token_symbol}`),
         2,
         2,
         true,
@@ -1565,7 +1595,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle1.name,
       sender1.name,
       examplehash,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       1,
       true,
@@ -1575,7 +1605,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle2.name,
       sender1.name,
       examplehash,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       1,
       true,
@@ -1585,7 +1615,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle1.name,
       sender1.name,
       examplehash,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       2,
       true,
@@ -1595,7 +1625,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle2.name,
       sender1.name,
       examplehash,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       2,
       true,
@@ -1606,7 +1636,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle1.name,
       sender1.name,
       examplehash,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       3,
       true,
@@ -1622,7 +1652,7 @@ context('add chains and check indexes (ci/11)', async () => {
         oracle1.name,
         sender1.name,
         examplehash,
-        `1.0000 ${token_symbol}`,
+        new Asset(`1.0000 ${token_symbol}`),
         1,
         4,
         true,
@@ -1696,7 +1726,7 @@ context('add chains and check indexes (ci/11)', async () => {
         oracle1.name,
         sender1.name,
         examplehash2,
-        `1.0000 ${token_symbol}`,
+        new Asset(`1.0000 ${token_symbol}`),
         1,
         4,
         true,
@@ -1711,7 +1741,7 @@ context('add chains and check indexes (ci/11)', async () => {
         oracle1.name,
         sender1.name,
         examplehash2,
-        `1.0000 ${token_symbol}`,
+        new Asset(`1.0000 ${token_symbol}`),
         1,
         9,
         true,
@@ -1725,7 +1755,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle1.name,
       sender1.name,
       examplehash2,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       10,
       true,
@@ -1735,7 +1765,7 @@ context('add chains and check indexes (ci/11)', async () => {
       oracle2.name,
       sender1.name,
       examplehash,
-      `1.0000 ${token_symbol}`,
+      new Asset(`1.0000 ${token_symbol}`),
       1,
       10,
       true,
@@ -1777,8 +1807,8 @@ function checkReseivedWithTimeToleranz(
     .equal(equal.confirmations, 'Wrong confirmations on id = ' + id);
   chai.expect(entry.index).equal(equal.index, 'Wrong index on id = ' + id);
   chai
-    .expect(entry.quantity)
-    .equal(equal.quantity, 'Wrong quantity on id = ' + id);
+    .expect(entry.quantity.toString())
+    .equal(equal.quantity.toString(), 'Wrong quantity on id = ' + id);
   chai.expect(entry.ref).equal(equal.ref, 'Wrong ref on id = ' + id);
   chai.expect(entry.to).equal(equal.to, 'Wrong to on id = ' + id);
 
@@ -1835,13 +1865,13 @@ async function issueTokens() {
   try {
     await alienworldsToken.create(
       alienworldsToken.account.name,
-      `1000000000.0000 ${token_symbol}`,
+      new Asset(`1000000000.0000 ${token_symbol}`),
       { from: alienworldsToken.account }
     );
 
     await alienworldsToken.issue(
       alienworldsToken.account.name,
-      `10000000.0000 ${token_symbol}`,
+      new Asset(`10000000.0000 ${token_symbol}`),
       'initial deposit',
       { from: alienworldsToken.account }
     );
@@ -1857,7 +1887,7 @@ async function issueTokens() {
   await alienworldsToken.transfer(
     alienworldsToken.account.name,
     sender1.name,
-    `1000000.0000 ${token_symbol}`,
+    new Asset(`1000000.0000 ${token_symbol}`),
     'inital balance',
     { from: alienworldsToken.account }
   );
@@ -1865,7 +1895,7 @@ async function issueTokens() {
   await alienworldsToken.transfer(
     alienworldsToken.account.name,
     teleporteos.account.name,
-    `1000000.0000 ${token_symbol}`,
+    new Asset(`1000000.0000 ${token_symbol}`),
     'inital balance',
     { from: alienworldsToken.account }
   );
