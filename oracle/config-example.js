@@ -38,9 +38,9 @@ module.exports = {
     telegram: {
         // Optional parameter to contact telegram accounts on oracle status and errors (It will only send messages, it will not receive any commands via Telegram)
         privateToken: '4814812745:YourSecretTelegramBotApiToken-927742', // Your private telegram bot API token got by @BotFather
-        statusIds: [00000000, 00000000], // IDs of Telegram accounts which will receive a message on starting and ending the thread of the oracle program. You can use telegram-id-provider.js to request your id.
-        errorIds: [00000000], // IDs of Telegram accounts which will receive error messages
-        costsIds: [00000000], // IDs of Telegram accounts which will receive a message on each action which costs system tokens
+        statusIds: [10000000, 10000000], // IDs of Telegram accounts which will receive a message on starting and ending the thread of the oracle program. You can use telegram-id-provider.js to request your id.
+        errorIds: [10000000], // IDs of Telegram accounts which will receive error messages
+        costsIds: [10000000], // IDs of Telegram accounts which will receive a message on each action which costs system tokens
     },
     powerup: {
         // Optional parameter to borrow resources if needed
